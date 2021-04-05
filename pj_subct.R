@@ -572,11 +572,56 @@ incomes_level <- function(project){
 }
 
 
+
+# INFO
 vendor_client <-  function(vendor, project){  
   transactions %>% 
     filter(grepl(vendor,name)) %>% 
     arrange(desc(date)) %>% 
     filter(grepl(project,customer)) 
+}
+
+
+
+# Contrast payments between QB & ZOHO 
+
+# NOTES:: 
+# interest <- c("Rmodl|52 T|162 Sem|27 FLAM|Marina|421 S")
+# Execute this function by project of interest 
+# function output is a list containing: 
+# transactions in QB that are not in ZOHO and viceversa,
+
+# Ubung:::
+
+# tarpon <- contraster("52 T")
+# less <- tarpon[[5]] %>% select(amount) %>% pull
+# more <- tarpon[[3]] %>% select(amount) %>% pull
+# sum(zoho$amount) - sum(less) + sum(more)
+
+
+contraster <- function(pj){ 
+
+  
+  qb   <- expenses(pj) %>% select(date,amount)
+  
+  zoho <- openxlsx::read.xlsx("zoho_pjs.xlsx") %>% 
+    as_tibble %>%
+    rename(date = Payment.Date, type = Transaction.Type) %>% 
+    mutate(date = as.Date(date, origin = "1899-12-30")) %>% 
+    mutate(date = as.Date(date, tryFormats = c("%m/%d/%Y"),optional=F)) %>% 
+    filter(grepl(pj,Project)) %>% 
+    select(date, amount = Amount.Paid)
+  
+  
+  diff1 <- qb %>% anti_join(zoho, by = c("date","amount"))
+  d1 <- print("in QB not in Zoho")
+  diff2 <- zoho %>% anti_join(qb, by = c("date","amount"))
+  d2 <- print("in Zoho not in Qb")
+  
+  d3 <- print("instruction: delete all in Zoho that's not in QB, add all in Zoho that's in QB but not at ZH")
+  
+  return(list(qb,zoho, diff1,d1,diff2,d2,d3))
+
 }
 
 
@@ -814,6 +859,9 @@ analisys <- pmap(focus, projects_analisys)
 
 
 #c) Dynamic merge file write ---------------------------------------------
+
+
+interest <- c("Rmodl|52 T|162 Sem|27 FLAM|Marina|421 S")
 
 
 condenzation <- function(){ 
