@@ -489,7 +489,6 @@ transactions <- openxlsx::read.xlsx("transactions.xlsx") %>%
   mutate(date = as.Date(date, origin = "1899-12-30")) %>% 
   mutate(date = as.Date(date, tryFormats = c("%m/%d/%Y"),optional=F))
 
-  
 
 transactions %>% group_by(type) %>% 
   summarise(n = n()) %>% arrange(desc(n)) %>% 
@@ -591,12 +590,12 @@ vendor_client <-  function(vendor, project){
 # function output is a list containing: 
 # transactions in QB that are not in ZOHO and viceversa,
 
-# Ubung:::
+# Exercise:::
+# Delete from ZOHO transactions not in QB or edit 
 
-# tarpon <- contraster("52 T")
-# less <- tarpon[[5]] %>% select(amount) %>% pull
-# more <- tarpon[[3]] %>% select(amount) %>% pull
-# sum(zoho$amount) - sum(less) + sum(more)
+# IF date & amount are the same and one of the amount contains a
+# DOT at the end of number, means the differece is a about cents
+# Decimals. 
 
 
 contraster <- function(pj){ 
@@ -614,15 +613,25 @@ contraster <- function(pj){
   
   
   diff1 <- qb %>% anti_join(zoho, by = c("date","amount"))
-  d1 <- print("in QB not in Zoho")
+  d1 <- print("in QB not in Zoho to ADD")
   diff2 <- zoho %>% anti_join(qb, by = c("date","amount"))
-  d2 <- print("in Zoho not in Qb")
+  d2 <- print("in Zoho not in Qb to ERASE")
   
   d3 <- print("instruction: delete all in Zoho that's not in QB, add all in Zoho that's in QB but not at ZH")
   
   return(list(qb,zoho, diff1,d1,diff2,d2,d3))
-
+  
+  
 }
+
+# Ubung:::
+
+ tarpon <- contraster("52 T")
+ less <- tarpon[[5]] %>% select(amount) %>% pull
+ more <- tarpon[[3]] %>% select(amount) %>% pull
+ sum(zoho$amount) - sum(less) + sum(more)
+
+
 
 
 #3) Rudiment calls -------------------------------------------------------------------------
