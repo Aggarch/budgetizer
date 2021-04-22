@@ -67,6 +67,124 @@ invoicing %>%
   
   
   
+setwd("C:/Users/andre/Downloads")
+
+interest <- c("Rmodl|52 T|162 Sem|27 FLAM|Marina|421 South|11000 SW|53 N|89070")
+
   
+inv_qb <- openxlsx::read.xlsx("invoices_qb.xlsx") %>% as_tibble() %>% 
+  mutate(date = as.Date(date, origin = "1899-12-30")) %>% 
+  select(-memo, -due_date, -type) %>% 
+  filter(grepl(interest, name)) %>% 
+  separate(name, c("client","project"),sep = "([:])")
+
+zinterest <- c("Remodel|52 T|162 Sem|27 FLAM|Marina|421 S|11000 SW|53 N")
+
+
+inv_zoho <- openxlsx::read.xlsx("invoices_zoho.xlsx") %>% as_tibble() %>% 
+  rename(date = Invoice.Date) %>% 
+  mutate(date = as.Date(date, origin = "1899-12-30")) %>% 
+  rename(num = Reference) %>% mutate(num = str_trim(num))
+
+inv_zoho <- inv_zoho %>%  filter(grepl(zinterest, Project))
   
-  
+
+# Missing Invoices::: 
+
+
+missing_invoices <-  inv_qb %>% anti_join(inv_zoho, by = c("date","num"))
+
+inv_zoho%>% anti_join(inv_qb, by = c("date","num"))
+
+
+st <- openxlsx::read.xlsx("subct_test.xlsx") %>% as_tibble
+
+test <- st %>% filter(Project %in% open_pj$Project.Name) %>%
+  mutate(Subcontract.Name = str_trim(Subcontract.Name)) %>% 
+  group_by(Project, Subcontract.Name) %>%
+  summarise(n = n(),.groups = "drop")
+
+
+
+# Invoicing 
+invoices <-  openxlsx::read.xlsx("invoices_qb.xlsx") %>% as_tibble() %>% 
+  mutate(date = as.Date(date, origin = "1899-01-01")) %>% 
+  mutate(open_balance = as.double(open_balance)) %>% 
+  separate(name, c("client","project"),sep = "([-])") %>% 
+  mutate(project = ifelse(is.na(project),client, project)) %>% 
+  mutate(client = str_trim(client),
+         project = str_trim(project)) %>% 
+  distinct()
+
+
+open_pj_invo <- transactions %>% 
+  #filter(grepl("CBT", name)) %>%
+  select(-memo, -account, -split, -class) %>% 
+  arrange(desc(date)) %>% filter(type == "Invoice") %>% 
+  select(-name) %>% 
+  separate(customer, c("client","project"),sep = "([:])") %>% 
+  filter(grepl(interest, project)) %>% 
+  select(-amount, -balance, -type) %>% 
+  distinct() %>% 
+  left_join(invoices %>% 
+              select(num, amount, open_balance), by = "num") %>% 
+  filter(!is.na(project))
+
+
+# Invoices 
+
+# Invoices from transactions ----------------------------------------------
+
+# filter by projects of interest,
+# able to separate labor from materiasl. 
+
+library(tidyverse)
+setwd("C:/Users/andre/Downloads")
+
+
+interest <- c("Rmodl|52 T|162 Sem|27 FLAM|Marina|421 South|11000 SW|53 N|89070")
+
+invoices_detailed <- transactions %>% 
+  filter(type == "Invoice", grepl(".Operational|Material", account)) %>%
+  filter(grepl(interest, customer)) %>% 
+  separate(account, c("source","class"),sep = "([:])") %>% 
+  separate(customer, c("client","project"),sep = "([:])") %>% 
+  select(date,client,project,class,num,amount)
+
+#inv_qb <- cleaner("invoices_qb")
+
+invoices <-  openxlsx::read.xlsx("invoices_qb.xlsx") %>% as_tibble() %>% 
+  mutate(date = as.Date(date, origin = "1899-01-01")) %>% 
+  mutate(open_balance = as.double(open_balance)) %>% 
+  separate(name, c("client","project"),sep = "([-])") %>% 
+  mutate(project = ifelse(is.na(project),client, project)) %>% 
+  mutate(client = str_trim(client),
+         project = str_trim(project)) %>% 
+  distinct()
+
+
+invo_detail <- invoices_detailed %>% 
+  left_join(invoices %>% select(num, open_balance), by = "num") %>% 
+  distinct()
+
+
+cbt <- invo_detail %>% filter(grepl("CBT", client)) %>% arrange(project) %>%
+  mutate(project = case_when(str_detect(project,"162 S")~"162 Seminole",
+                             str_detect(project,"27 F")~"27 Flamingo",
+                             str_detect(project,"52 T")~"52 Tarpon"))
+
+
+
+# Homogenize the project name to successfully join it with subct data          D
+# Manually create a tibble with the name of the projects of interest,          D
+# create a column with the invo_detail project name, zoho name and the         D
+# desirable name, include the quote line of service by project.                D
+# smartly join data sources using homogenized project name as a key.           P
+# once structure is completed, join together;
+
+# Projects:: subct:: invoices:: expenses:: ::Labor & Materials.
+
+
+open_tibble <- openxlsx::read.xlsx("open_tibble.xlsx") %>% as_tibble()
+
+

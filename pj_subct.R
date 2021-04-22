@@ -83,8 +83,6 @@ titan <- invoices %>% filter(grepl("Titan",name))
 
 
 
-
-
 pj_invoices <- invoices %>%
   filter(project %in% open_pj$project) %>% 
   select(-name) %>% left_join(open_pj, by = "project") %>% 
@@ -101,7 +99,7 @@ abstract <- pj_invoices %>%
             inv_due_date = max(inv_due_date))
 
 
-
+w
 #openxlsx::write.xlsx(pj_invoices, "projects_invoices_status.xlsx")
 
 
@@ -505,11 +503,12 @@ expenses <- function(project){
   
   pj_data <- transactions %>% 
     filter(grepl(project,customer)) %>% 
-    filter(grepl("Indirect|Direct Labor|Direct Material|Fees|Services",account))
+    filter(grepl("Indirect|Labor|Direct Material|Fees|Services|Officer",account))
   
   return(pj_data)
   
 }
+
 
 grouped_expenses <- function(project){ 
   
@@ -524,6 +523,7 @@ project_expenses <- expenses(project) %>%
 return(project_expenses)
 
 }
+
 
 expenses_level <- function(project){ 
   
@@ -598,18 +598,25 @@ vendor_client <-  function(vendor, project){
 # Decimals. 
 
 
-contraster <- function(pj){ 
-
+contraster <- function(pj,pjs){ 
   
-  qb   <- expenses(pj) %>% select(date,amount)
+  setwd("C:/Users/andre/Downloads")
+  
+  qb   <- expenses(pj) %>% select(date,amount) %>% 
+    arrange(desc(date))
+    # mutate(date = date-1)
   
   zoho <- openxlsx::read.xlsx("zoho_pjs.xlsx") %>% 
     as_tibble %>%
     rename(date = Payment.Date, type = Transaction.Type) %>% 
     mutate(date = as.Date(date, origin = "1899-12-30")) %>% 
     mutate(date = as.Date(date, tryFormats = c("%m/%d/%Y"),optional=F)) %>% 
-    filter(grepl(pj,Project)) %>% 
-    select(date, amount = Amount.Paid)
+    filter(grepl(pjs,Project)) %>% 
+    select(date, amount = Amount.Paid) %>% 
+    arrange(desc(date)) %>% 
+    mutate(amount = ifelse(is.na(amount),0,amount)) %>% 
+    arrange(desc(date))
+  
   
   
   diff1 <- qb %>% anti_join(zoho, by = c("date","amount"))
@@ -621,17 +628,35 @@ contraster <- function(pj){
   
   return(list(qb,zoho, diff1,d1,diff2,d2,d3))
   
-  
 }
+
 
 # Ubung:::
 
- tarpon <- contraster("52 T")
- less <- tarpon[[5]] %>% select(amount) %>% pull
- more <- tarpon[[3]] %>% select(amount) %>% pull
+ seminole <- contraster("162 S", "162 S")
+ less <- seminole[[5]] %>% select(amount) %>% pull
+ more <- seminole[[3]] %>% select(amount) %>% pull
  sum(zoho$amount) - sum(less) + sum(more)
+ 
+ 
+# In 162 Seminole case, all transactions registered in qb are in zoho 
+# there are 4 missing transactions in zoho that are not in qb. 
+# All transaction are recorded but with diff date (18899)
+# transactions from quickbooks are adding a day, or zoho's are lagging. ?¿ 
+ 
+ 
+ 
+ # Not only the scenario where deleting all in qb thats not in zoho is possible 
+ # qb transactions that are not registered properly within customer and class 
+ # specifications may produce a bias in the filtering executions, this uncompleted
+ # registration seems like data it's missing, additionally takes longer to update in 
+ # quickbooks visual report.
+ 
+ 
 
 
+ # Why is the accounts diverging again after introducing all the payments in both systems. 
+ 
 
 
 #3) Rudiment calls -------------------------------------------------------------------------
@@ -782,13 +807,6 @@ consolid_df <- do.call(rbind.data.frame, all_data) %>%
   as_tibble() %>% 
   mutate(date = as.Date(date, origin = "1899-12-30")) %>%
   mutate(date = as.Date(date, tryFormats = c("%m/%d/%Y"),optional = F ))
-
-
-
-
-
-
-
 
 
 
@@ -995,7 +1013,10 @@ invoices_filtered <- invoices %>%
   janitor::adorn_totals()
   
 
-
+invoices <- openxlsx::read.xlsx("invoices.q.xlsx") %>% as_tibble() %>%
+  mutate(date = as.Date(date, origin = "1899-12-30"))
+  
+  
 
 
 # Contrasted : Compare ZOHO vs QB registers  ------------------------------
@@ -1025,3 +1046,46 @@ pj_zoho %>% anti_join(pj_qb, by = c("date", "amount"))
 
 
 
+
+# Invoices contraster  ----------------------------------------------------
+
+
+invoices_divergence <- function(file){
+  
+  
+  inv.z <- openxlsx::read.xlsx("invoices.z.xlsx") %>% 
+    as_tibble() %>% 
+    mutate(Invoice.Date = as.Date(Invoice.Date, origin = "1899-12-30"))%>%
+    select(date = Invoice.Date, ref = Reference, amount = Amount) %>% 
+    mutate(ref = str_trim(ref))
+  
+  inv.q <- cleaner("invoices.q")
+  
+  inv.q <- inv.q %>% filter(open_balance > 0) %>% select(date, ref = num, amount)
+  
+  
+  missing <- inv.q %>% anti_join(inv.z, by = "ref")  
+  
+  invoices_quick <- openxlsx::read.xlsx("invoices.q.xlsx") %>% as_tibble() %>% 
+    mutate(date = as.Date(date, origin = "1899-12-30"))
+    
+  
+}
+
+
+
+# Expenses Analisys -------------------------------------------------------
+
+
+islandr <- expenses("Rmod") %>% select(date,account,class,amount)
+
+
+island_rem <- islandr %>%   mutate(concept = case_when(str_detect(account,"Materials")~"Materials",
+                                                       str_detect(account, "Supplies")~"Materials",
+                                                       str_detect(account, "Labor")~"Labor",
+                                                       TRUE ~ as.character(account))) %>% 
+  mutate(phase = ifelse(date <=  "2021-03-25", "1st","2nd")) %>% 
+  mutate(class = case_when(class == "Painting"~"Int Painting",
+                           class == "Drywall / Finish" ~ "Finish",
+                           TRUE ~ as.character(class))) %>% 
+  arrange(date)
