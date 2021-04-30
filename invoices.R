@@ -139,6 +139,8 @@ open_pj_invo <- transactions %>%
 # able to separate labor from materiasl. 
 
 library(tidyverse)
+library(openxlsx)
+
 setwd("C:/Users/andre/Downloads")
 
 
@@ -153,7 +155,7 @@ invoices_detailed <- transactions %>%
 
 #inv_qb <- cleaner("invoices_qb")
 
-invoices <-  openxlsx::read.xlsx("invoices_qb.xlsx") %>% as_tibble() %>% 
+invoices <-  openxlsx::read.xlsx("invoices.xlsx") %>% as_tibble() %>% 
   mutate(date = as.Date(date, origin = "1899-01-01")) %>% 
   mutate(open_balance = as.double(open_balance)) %>% 
   separate(name, c("client","project"),sep = "([-])") %>% 
@@ -168,10 +170,56 @@ invo_detail <- invoices_detailed %>%
   distinct()
 
 
-cbt <- invo_detail %>% filter(grepl("CBT", client)) %>% arrange(project) %>%
+
+
+# Account Statement F(x) --------------------------------------------------
+account_statement <- function(client){
+  
+  setwd("C:/Users/andre/Downloads")
+  dir.create("account_statement")
+  setwd("C:/Users/andre/Downloads/account_statement")
+  
+  
+  wb <- createWorkbook()
+  addWorksheet(wb,"account_detailed")
+  addWorksheet(wb,"consolidated")
+
+
+detailed <- invo_detail %>% filter(grepl("CBT", client)) %>% arrange(project) %>%
   mutate(project = case_when(str_detect(project,"162 S")~"162 Seminole",
                              str_detect(project,"27 F")~"27 Flamingo",
-                             str_detect(project,"52 T")~"52 Tarpon"))
+                             str_detect(project,"52 T")~"52 Tarpon")) %>% 
+  filter(open_balance>1) %>% 
+  mutate(class = case_when(class == "Materials Income"~"Materials",
+                           class == "Home Maintenance"~"Maintenance",
+                           TRUE ~ as.character(class))) %>% 
+  arrange(project)
+
+
+consolidated <- detailed %>% 
+  group_by(date,client,project,num) %>% 
+  summarise(amount  = sum(amount), 
+            open_balance = max(open_balance),
+            class = str_flatten(class,","),
+            .groups = "drop") %>% 
+  relocate(.before = num, class) %>% 
+  arrange(project)
+
+
+
+  writeData(wb, "account_detailed", detailed)
+  writeData(wb, "consolidated", consolidated)
+  
+  
+  
+  openxlsx::saveWorkbook(wb, 
+                         file = paste0(client,"_account_statement.xlsx"),
+                         overwrite = TRUE)
+  
+  return(list(detailed,consolidated))
+
+
+}
 
 
 
@@ -186,5 +234,12 @@ cbt <- invo_detail %>% filter(grepl("CBT", client)) %>% arrange(project) %>%
 
 
 open_tibble <- openxlsx::read.xlsx("open_tibble.xlsx") %>% as_tibble()
+
+
+
+check <- openxlsx::read.xlsx("checking.xlsx") %>% as_tibble() %>% 
+  filter(VALOR > 0) %>% filter(grepl("INTERNAC",DESCRIPCIÓN)) %>% 
+  mutate(FECHA = as.Date(FECHA, origin = "1899-01-01")) %>% 
+  select(-DOCUMENTO,-OFICINA,-REFERENCIA)
 
 
