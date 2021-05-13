@@ -243,3 +243,95 @@ check <- openxlsx::read.xlsx("checking.xlsx") %>% as_tibble() %>%
   select(-DOCUMENTO,-OFICINA,-REFERENCIA)
 
 
+
+
+
+# CBT state of account ----------------------------------------------------
+
+
+cbt_openb <- invoices %>% 
+  filter(grepl("CBT",name)) %>% 
+  select(-memo) %>% 
+  mutate(open_balance = as.double(open_balance))
+  
+
+
+cbt_detailed <- transactions %>%
+  filter(type == "Invoice") %>%
+  filter(grepl("CBT",name)) %>% 
+  filter(!is.na(account)) %>% 
+  filter(!grepl("Receiv",account)) %>% 
+  separate(name, c("client","project"),sep = "([:])") %>% 
+  separate(account, c("income","service"),sep = "([:])") %>% 
+  select(-memo,-class, -customer, -balance,-split) %>%
+  mutate(income = str_replace(income, ".","")) %>% 
+  mutate(income = case_when(str_detect(income,"Operat")~"operational",
+                            str_detect(income,"aterial")~"material")) %>% 
+  mutate(service = str_to_lower(service)) %>% 
+  mutate(service = str_replace(service, "income","")) %>% 
+  mutate(service = str_trim(service))
+
+
+cbt_compacted <- cbt_detailed %>% 
+  left_join(cbt_openb %>% 
+              select(num,open_balance), by="num") %>% 
+  mutate(service = ifelse(service =="materials",
+                          lag(service),service)) %>% 
+  mutate(service = ifelse(service =="materials",
+                          lag(service),service)) 
+
+
+cbt_compacted %>%
+  group_by(project,num) %>% 
+  summarise(amount = sum(amount),
+            open_balance = last(open_balance),
+            .groups = "drop") %>%
+  filter(!grepl("142",project)) %>% 
+  janitor::adorn_totals()
+
+
+# Exclude the 142 seminole & reorganize ::: 
+
+detail <- cbt_compacted %>% filter(!grepl("142",project)) %>%
+  mutate(service = ifelse(service == "home maintenance","installations",service)) %>%
+  mutate(service = ifelse(service == "drywall installation","drywall & finish",service)) %>% 
+  select(-open_balance) %>% 
+  janitor::adorn_totals()
+
+
+
+
+# CBT Already charged by service 
+
+cbt_charged <- cbt_compacted %>% 
+  group_by(project,num,service) %>% 
+  summarise(amount = sum(amount),
+            .groups = "drop") %>% 
+  janitor::adorn_totals()
+
+
+
+
+
+transactions_0512
+# current transactions not yesterday:
+transactions %>% anti_join(transactions_0512, by = c("date","name","amount"))
+
+
+
+# Note --------------------------------------------------------------------
+
+# new process improved to download data with timestamp. 
+
+transactions %>% filter(num %in% c( "S00840", 
+                                    "S00841", 
+                                    "S00842", 
+                                    "S00843", 
+                                    "S00844", 
+                                    "S00845", 
+                                    "S00846" )) %>%
+  filter(!grepl("Recei",account)) %>% 
+  replace_na(list(amount = 0)) %>% 
+  select(-create_date,-memo,-balance,-name) %>%
+  filter(!is.na(account)) %>% 
+  janitor::adorn_totals()

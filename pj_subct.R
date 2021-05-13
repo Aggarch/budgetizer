@@ -106,7 +106,10 @@ tibble <- data %>% janitor::clean_names()
 transact_tibble <- tibble[-1,] %>% filter(date != is.na(date))%>% 
   mutate_all(., str_trim) %>% mutate(amount = as.double(amount)) %>% 
   mutate(date = as.Date(date, tryFormats = c("%m/%d/%Y"),optional = F )) %>% 
-  rename(type = transaction_type,memo = memo_description)
+  rename(type = transaction_type,memo = memo_description) %>% 
+  mutate(creation_date = lubridate::parse_date_time(create_date, orders="mdy HMS")) %>% 
+  mutate(modification_date = lubridate::parse_date_time(last_modified, orders="mdy HMS")) %>% 
+  arrange(desc(creation_date)) %>% select(-create_date,-last_modified)
 
 
 openxlsx::write.xlsx(transact_tibble,file_name)
@@ -115,6 +118,8 @@ return(transact_tibble)
 
 
 }
+
+
 
 #transactions <- cleaner("transactions")
 
@@ -238,13 +243,15 @@ vendor_client <-  function(vendor, project){
 
 contraster <- function(pj,pjs){ 
   
+  # feed by quickbooks transactions & Zoho's all payments. 
+  
   setwd("C:/Users/andre/Downloads")
   
   qb   <- expenses(pj) %>% select(date,amount) %>% 
     arrange(desc(date))
     # mutate(date = date-1)
   
-  zoho <- openxlsx::read.xlsx("zoho_pjs.xlsx") %>% 
+  zoho <- openxlsx::read.xlsx("all_payments.xlsx") %>% 
     as_tibble %>%
     rename(date = Payment.Date, type = Transaction.Type) %>% 
     mutate(date = as.Date(date, origin = "1899-12-30")) %>% 
@@ -269,14 +276,48 @@ contraster <- function(pj,pjs){
 }
 
 
+
 # Ubung:::
 
- seminole <- contraster("162 S", "162 S")
- less <- seminole[[5]] %>% select(amount) %>% pull
- more <- seminole[[3]] %>% select(amount) %>% pull
- sum(zoho$amount) - sum(less) + sum(more)
- 
- 
+remodel <- contraster("Rmod", "Remodel")
+less <- remodel[[5]] %>% select(amount) %>% pull
+more <- remodel[[3]] %>% select(amount) %>% pull
+sum(zoho$amount) - sum(less) + sum(more)
+
+
+
+# By date Comparisson -----------------------------------------------------
+
+
+
+compare_by_date <- function(pj,pjs,date_input) {    
+
+  
+  qb <- transactions %>% filter(grepl(pj, customer), date == date_input) %>% 
+    select(-balance,-customer,-split,-account) %>% 
+    janitor::adorn_totals()
+  
+  zoho <- openxlsx::read.xlsx("all_payments.xlsx") %>% 
+    as_tibble %>%
+    rename(date = Payment.Date, type = Transaction.Type) %>% 
+    mutate(date = as.Date(date, origin = "1899-12-30")) %>% 
+    mutate(date = as.Date(date, tryFormats = c("%m/%d/%Y"),optional=F)) %>% 
+    filter(grepl(pjs,Project)) %>% 
+    filter(date == date_input) %>% 
+    rename(name = Resource, amount = Amount.Paid) %>% 
+    mutate(name = str_trim(name)) %>% 
+    select(-Vendor, -Amount.to.Pay, -Retainage.Amount) %>% 
+    janitor::adorn_totals()
+  
+  
+  zoho %>% anti_join(qb, by = c("date", "amount"))
+  qb %>% anti_join(zoho, by = c("date", "amount"))
+  
+  
+  return(list(qb, zoho))
+  
+}
+
 # In 162 Seminole case, all transactions registered in qb are in zoho 
 # there are 4 missing transactions in zoho that are not in qb. 
 # All transaction are recorded but with diff date (18899)
@@ -301,7 +342,7 @@ contraster <- function(pj,pjs){
 
 
 # Expenses queried from accounts DL,DM,IL, fees & services:
-expenses("Rmodl")
+dd("Rmodl")
 
 # Expenses grouped by account and summarized
 grouped_expenses("Rmodl")%>% 
@@ -538,6 +579,8 @@ filenames_list <- list.files()
 all_data <- lapply(filenames_list,function(filename){
   print(paste("Merging",filename,sep = " "))
   read.xlsx(filename)
+  
+  
 })
 
 
@@ -798,7 +841,7 @@ zoho_projects <- function(){
   
   setwd("C:/Users/andre/Downloads")
   
-  subs <- openxlsx::read.xlsx("subct_zoho.xlsx")
+  subs <- openxlsx::read.xlsx("subct.xlsx")
   pays <- openxlsx::read.xlsx("payments.xlsx")
   
   
@@ -806,11 +849,11 @@ zoho_projects <- function(){
   setwd("C:/Users/andre/Downloads/project_analysis")
   
   
-  wb <- createWorkbook()
-  addWorksheet(wb,"detail_payments")
-  addWorksheet(wb,"consolid_payments")
-  addWorksheet(wb,"subct_raw")
-  addWorksheet(wb,"consolid")
+  wb <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(wb,"detail_payments")
+  openxlsx::addWorksheet(wb,"consolid_payments")
+  openxlsx::addWorksheet(wb,"subct_raw")
+  openxlsx::addWorksheet(wb,"consolid")
   
   
 
@@ -821,8 +864,7 @@ subct <-subs %>% as_tibble() %>%
   select(project = Project,service = Service,
          subct_name = Subcontract.Name,
          subct_amount = Contract.Amount, 
-         budget_days = Budget.Days,
-         remaining_days = Remaining.Days) %>% 
+         budget_days = Budget.Days) %>% 
   mutate(project = 
            case_when(str_detect(project,"52 T")~"52 Tarpon",
                      str_detect(project,"162 S")~"162 Seminole",
@@ -832,11 +874,12 @@ subct <-subs %>% as_tibble() %>%
                      str_detect(project, "27 F")~"27 Flamingo",
                      str_detect(project, "Marina")~"Marina Village",
                      TRUE ~ as.character(project))) %>% 
-  arrange(project) %>% filter(!grepl("Old",subct_name))
+  arrange(project) %>% filter(!grepl("Old",subct_name)) %>% 
+  mutate(subct_name = str_trim(subct_name))
 
 
 
-interest <- c("53 N|Remodel|52 T|162 Sem|27 FLAM|Marina|421 South")
+# interest <- c("53 N|Remodel|52 T|162 Sem|27 FLAM|Marina|421 South")
 
 payments <- pays %>% as_tibble() %>% 
   filter(grepl(interest, Project)) %>% 
@@ -854,7 +897,9 @@ payments <- pays %>% as_tibble() %>%
   select(date,project,service = Services,
          subct_name = Subcontract.Name,
          subct_id=Subcontract,type, amount=Amount.Paid) %>% 
-  mutate(type = ifelse(type == "Expense","Materials","Labor")) 
+  mutate(type = ifelse(type == "Expense","Materials","Labor")) %>% 
+  mutate(subct_name = str_trim(subct_name))
+
 
 
 grouped <- payments %>%
@@ -871,10 +916,10 @@ consolid <- subct %>%
 
 
 
-writeData(wb, "consolid", consolid)
-writeData(wb, "detail_payments", payments)
-writeData(wb, "consolid_payments", grouped)
-writeData(wb,"subct_raw",subct)
+openxlsx::writeData(wb, "consolid", consolid)
+openxlsx::writeData(wb, "detail_payments", payments)
+openxlsx::writeData(wb, "consolid_payments", grouped)
+openxlsx::writeData(wb, "subct_raw",subct)
 
 
 openxlsx::saveWorkbook(wb, 
@@ -887,10 +932,10 @@ checker <- function(pj){
   
 pays %>% as_tibble() %>%
   rename(type = Transaction.Type)%>% 
-  filter(!grepl("Expense",type))  %>% 
+  # filter(!grepl("Expense",type))  %>% 
   mutate(Amount.Paid = ifelse(is.na(Amount.Paid),0,Amount.Paid)) %>% 
   filter(grepl(pj, Project)) %>% 
-  group_by(Subcontract.Name, Subcontract) %>% 
+  group_by(Subcontract.Name, Subcontract,type) %>% 
   summarise(amount = sum(Amount.Paid),
             .groups = "drop") %>%
   janitor::adorn_totals() 
@@ -898,62 +943,317 @@ pays %>% as_tibble() %>%
 }
 
 
-lala <- function(num){
+
+
+# project analysis --------------------------------------------------------
+
+setwd("C:/Users/andre/Downloads")
+
+
+# Open projects in Zoho 
+open_pj <- openxlsx::read.xlsx("open_pj.xlsx") %>% as_tibble() %>% 
+  select(project = Project.Name)
+
+# All subcontracts in Zoho 
+subct <- openxlsx::read.xlsx("subct.xlsx") %>% as_tibble() %>% 
+  janitor::clean_names() %>% 
+  select(project,subct_id = subcontract_id, start_date,
+         contract_amount, budget_days) %>% 
+  replace_na(list(contract_amount = 0,
+                  budget_days = 0)) %>% 
+  mutate(start_date = as.Date(start_date, origin = "1899-01-01")) %>% 
+  semi_join(open_pj, by = "project")
+
+
+# Wrangling data 
+data <- openxlsx::read.xlsx("payments.xlsx") %>% as_tibble() %>% 
+  mutate(Payment.Date = as.Date(Payment.Date, origin = "1899-12-30")) %>% 
+  janitor::clean_names() %>% 
+  filter(!is.na(project))%>% 
+  filter(project %in% open_pj$project)
+
+
+# By date payments distribution ------------------------------------------------------------
+
+dist_paid <- function(date){
+data %>% filter(Payment.Date == date) %>%
+    group_by(Project,Subcontract,Subcontract.Name) %>%
+    summarise(amount = sum(Amount.Paid),.groups = "drop") %>%
+    mutate(payment_date = date) %>% 
+    relocate(.before = Project,payment_date) %>% 
+    janitor::adorn_totals()
   
-  
-  d <- (num*3620)+2000000-(2500000) 
-  f <- d-5000000
-  
-  return(list(d,f))
 }
 
 
 
-# Pricing Model  ----------------------------------------------------------
+# Create Report of Projects 
+projects <- data %>%
+  # rename(subct_id = subcontract) %>% 
+  group_by(project, services, subcontract,
+           subcontract_name, transaction_type) %>% 
+  summarise(amount = sum(amount_paid),.groups = "drop") %>% 
+  pivot_wider(names_from = transaction_type, 
+                           values_from = amount) %>% 
+  janitor::clean_names() %>%
+  replace_na(list(expense = 0, subcontract_2 = 0, 
+                  hourly_labor = 0, retainage_payment = 0))%>% 
+  rowwise() %>% 
+  mutate(labor_paid = sum(subcontract_2,hourly_labor,retainage_payment)) %>% 
+  ungroup() %>% 
+  rename(subct_id = subcontract,
+         subcontract_payment = subcontract_2,
+         materials_paid = expense) %>% 
+  relocate(.before = materials_paid, labor_paid) %>%
+  left_join(subct, by = c("subct_id","project")) %>% 
+  rename(labor_budget = contract_amount) %>% 
+  mutate(completion = 1) %>% 
+  mutate(accrued_labor = completion * labor_budget) %>% 
+  mutate(labor_ratio = 1-(labor_paid/accrued_labor)) %>% 
+  mutate(materials_budget = case_when(str_detect(services,"Dryw")~labor_budget*.4,
+                                      str_detect(services,"Fram")~labor_budget*.6,
+                                      str_detect(services,"Stuc")~labor_budget*.12,
+                                      str_detect(services,"Inst")~labor_budget*.20,
+                                      str_detect(services,"Pain")~labor_budget*.20)) %>% 
+  mutate(accrued_materials = completion * materials_budget) %>%
+  mutate(materials_ratio = 1-(materials_paid/accrued_materials)) %>% 
+  select(project, services, subct_id, subcontract_name,completion,
+         labor_budget,accrued_labor,labor_paid,labor_ratio,
+         materials_budget,materials_paid,accrued_materials,materials_ratio,
+         budget_days) %>% 
+  mutate(subcontract_name = str_trim(subcontract_name)) %>% 
+  mutate(subct_id = str_extract(subct_id,"[[:digit:]]+")) %>% 
+  select(-contains("days")) %>% relocate(.before = materials_paid, accrued_materials)
 
-core <- openxlsx::read.xlsx("prices_tibble.xlsx") %>% as_tibble()
+# Short names 
+names = projects %>% distinct(project) %>% 
+  mutate(projects = substr(project, 0,12)) %>% 
+  mutate(projects = str_trim(projects)) %>% 
+  mutate(projects = str_to_title(projects))
+  
 
-d2 <- core %>% mutate(difficulty = 2, price = price+1)
-d3 <- core %>% mutate(difficulty = 3, price = price+2)
-d4 <- core %>% mutate(difficulty = 3, price = price+3)
-
-prices <- core %>% bind_rows(d2,d3,d4) %>% 
-  rename(design = surface)
-
-openxlsx::write.xlsx(prices, "prices_tibble.xlsx")
+# Final Anatomy 
+project_analysis <- projects %>% left_join(names, by = "project") %>% 
+  relocate(.before = project,projects)
 
 
+# Change of orders for open_pj with transactions history. 
 
-toff <- openxlsx::read.xlsx("toff.xlsx") %>% 
+change_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>% 
+  as_tibble() %>% filter(Project %in% projects$project) %>% 
+  mutate(co_num = paste0("CO000", Change.Order.Number)) %>% 
+  janitor::clean_names() %>% 
+  relocate(.after = project,co_num) %>% 
+  select(-change_order_number,-accepted,-acceptance_date) %>% 
+  mutate(agreement_date = as.Date(agreement_date, origin = "1899-12-30"))
+
+
+  
+
+
+# Materials %
+# 
+# D&F  ::: 40%
+# STUC ::: 12%
+# FAMG ::: 60%
+# APNT ::: 20%
+# INST ::: 20%
+
+date <- lubridate::today() %>% str_replace_all(.,"-","_")
+project_analysis %>% openxlsx::write.xlsx(., paste0(date,"_project_analysis.xlsx"))
+
+
+outflow <- openxlsx::read.xlsx("april.xlsx") %>%
   as_tibble() %>% 
-  mutate(Service = str_to_lower(Service)) %>% 
-  janitor::clean_names()
+  filter(!is.na(Amount.Paid)) %>% 
+  mutate(Payment.Date = as.Date(Payment.Date, origin = "1899-12-30")) %>%
+  mutate(date = as.Date(Payment.Date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y"),optional = F)) %>% 
+  group_by(Project,date) %>%
+  summarise(cant = n(), amount = sum(Amount.Paid),.groups = "drop")
 
 
-pricing <- toff %>% filter(service == "stucco") %>% 
-  select(service,difficulty,design,
-         texture,thickness,total_sf) %>%
-  left_join(prices, by=c("service", "difficulty", 
-                         "design", "texture", "thickness"))
-
-estimation <- pricing %>%
-  mutate_if(is.character, str_trim) %>% 
-  group_by(service,difficulty,design,texture,thickness) %>% 
-  summarise(sqft = sum(total_sf),
-            price = price*sqft,
-            .groups = "drop") %>% 
-  distinct() %>%
-  janitor::adorn_totals()
+outflow %>%
+  group_by(Project) %>% 
+  summarise(cant = sum(cant),
+            amount = sum(amount)) %>% 
+  filter(!is.na(Project), 
+         !grepl("ROHO",Project))
 
 
 
-# revision Pumpkin --------------------------------------------------------
-
-pump <- invoices %>% filter(grepl("72 P", name))
-transactions %>% filter(num %in% pump$num) 
+# # By period Income:::  --------------------------------------------------
 
 
+period_invoiced <- function(i_date,f_date) {
+  
+  invoiced <- transactions %>% 
+    filter(between(date, as.Date(i_date),
+                         as.Date(f_date))) %>% 
+    filter(type == "Invoice", !is.na(amount), !grepl("Receiva",account)) %>% 
+    select(-balance)
+  
+  pj_invoiced <- invoiced %>% group_by(customer) %>%
+    summarise(amount = sum(amount)) 
+    # filter(amount > 1) %>% 
+    # janitor::adorn_totals()
+  
+  total <-  sum(pj_invoiced$amount)
+  
+  
+  return(list(invoiced,pj_invoiced,total))
+  
+}
+
+
+# # By period Expenses:::  ------------------------------------------------
+
+
+
+period_expensed <- function(i_date,f_date){
+  
+  expensed <- transactions %>% 
+    filter(between(date, as.Date(i_date),
+                         as.Date(f_date))) %>% 
+    filter(grepl("Indirect|Labor|Direct Material|Fees|Services|Officer",account)) %>% 
+    select(-balance) %>% 
+    filter(!grepl("ROHO",customer), !is.na(customer))
+  
+
+  
+  pj_expensed <- expensed %>% group_by(customer) %>%
+    summarise(amount = sum(amount))
+    # filter(amount > 1) %>% 
+
+  
+  total <-  sum(pj_expensed$amount)
+  
+  
+  return(list(expensed, pj_expensed,total))
+  
+}
+
+
+
+# By project result of income and expenses by date rage -------------------
+
+
+compacted_p <- function(i_date, f_date){
+  
+  inflow  <- period_invoiced(i_date,f_date)[[2]] %>% rename(amount_invoiced = amount)
+  outflow <- period_expensed(i_date,f_date)[[2]] %>% rename(amount_expensed = amount)
+  
+  
+  result_a <- inflow %>% left_join(outflow, by = "customer") %>% 
+    replace_na(list(amount_invoiced = 0, amount_expensed = 0))
+
+  
+  result_b <- outflow %>% left_join(inflow, by = "customer") %>% 
+    replace_na(list(amount_invoiced = 0, amount_expensed = 0))
+
+  
+  result <- result_a %>% bind_rows(result_b) %>% distinct()
+  
+  return(result)
+  
+}
+
+pricing <- function(serv,diff,tex,des,thick){ 
+prices <- openxlsx::read.xlsx("price_tibble.xlsx") %>% as_tibble() %>% 
+  filter(service == serv, texture == tex, design == des, difficulty == diff) %>% 
+  filter(grepl(thick,thickness))
+
+return(prices)
+  
+}
 
 
 
 
+# Explore OneDrive files  -------------------------------------------------
+
+# Works when onedrive it's sync with local machine. 
+
+# MENU :::
+
+# explorer
+
+
+# Folders
+setwd("C:/Users/andre/OneDrive/RohosGroup") %>% 
+  list.files() %>% as_tibble() %>% rename(folders = value)
+
+
+
+explorer <- function(folder){
+  
+  
+  setwd("C:/Users/andre/OneDrive/RohosGroup") 
+  
+  getwd()%>% 
+  list.files() %>% as_tibble() %>%
+  rename(folders = value) %>% print()
+  
+  
+  direction <-  getwd() %>% as_tibble() %>%
+    mutate(value = paste0(value,"/")) %>% 
+    mutate(value = paste0(value,folder))
+  
+  setwd(direction$value)
+  
+  files <- getwd() %>% list.files() %>% as_tibble() %>% 
+    rename(files = value)
+  
+  getwd() %>% print()
+  
+  setwd("C:/Users/andre/Downloads")
+  
+  return(files)
+  
+}
+
+
+
+
+all_proposals <-   setwd("C:/Users/andre/OneDrive/RohosGroup/PROPOSALS") %>% 
+  list.files() %>% as_tibble() %>% rename(Proposals = value)
+
+
+
+# Search proposal ---------------------------------------------------------
+
+search_proposal <- function(pj){ 
+  
+  # https://stackoverflow.com/questions/12945687/read-all-worksheets-in-an-excel-workbook-into-an-r-list-with-data-frames
+
+  proposal_folder <- setwd("C:/Users/andre/OneDrive/RohosGroup/PROPOSALS") %>%
+    list.files() %>% as_tibble() %>% 
+    filter(grepl(pj,value)) %>% pull()
+  
+  direction <-  getwd() %>% as_tibble() %>%
+    mutate(value = paste0(value,"/")) %>% 
+    mutate(value = paste0(value,proposal_folder)) %>% 
+    pull()
+  
+  setwd(direction)
+  
+  specific_file <- getwd() %>% list.files() %>% as_tibble() %>% 
+    filter(!grepl(".pdf|Client|client",value)) %>% 
+    filter(grepl(".xlsx",value))
+  
+  
+  take_off <- openxlsx::read.xlsx(specific_file$value) %>% 
+    as_tibble() %>% janitor::clean_names()
+
+  print(direction) 
+  
+  print(direction %>% list.files())
+  
+  openxlsx::getSheetNames(specific_file$value) %>%
+    as_tibble() %>% print()
+  
+  setwd("C:/Users/andre/Downloads")
+  
+  
+return(take_off)
+
+}
