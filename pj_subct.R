@@ -152,6 +152,17 @@ expenses <- function(project){
   
 }
 
+expenses_ts <- function(project){
+  
+  pj_data <- transactions %>% 
+    filter(grepl(project,customer)) %>% 
+    filter(grepl("Indirect|Labor|Direct Material|Fees|Services|Officer",account)) %>% 
+    group_by(customer,date) %>% summarise(amount = sum(amount))
+  
+  return(pj_data)
+  
+}
+
 
 grouped_expenses <- function(project){ 
   
@@ -251,7 +262,7 @@ contraster <- function(pj,pjs){
     arrange(desc(date))
     # mutate(date = date-1)
   
-  zoho <- openxlsx::read.xlsx("all_payments.xlsx") %>% 
+  zoho <- openxlsx::read.xlsx("payments.xlsx") %>% 
     as_tibble %>%
     rename(date = Payment.Date, type = Transaction.Type) %>% 
     mutate(date = as.Date(date, origin = "1899-12-30")) %>% 
@@ -263,6 +274,9 @@ contraster <- function(pj,pjs){
     arrange(desc(date))
   
   
+  z <- print(paste("ZOHO:",sum(zoho$amount)))
+  q <- print(paste("QuickB:",sum(qb$amount)))
+  
   
   diff1 <- qb %>% anti_join(zoho, by = c("date","amount"))
   d1 <- print("in QB not in Zoho to ADD")
@@ -271,7 +285,7 @@ contraster <- function(pj,pjs){
   
   d3 <- print("instruction: delete all in Zoho that's not in QB, add all in Zoho that's in QB but not at ZH")
   
-  return(list(qb,zoho, diff1,d1,diff2,d2,d3))
+  return(list(z,q,qb,zoho, diff1,d1,diff2,d2,d3))
   
 }
 
@@ -958,7 +972,7 @@ open_pj <- openxlsx::read.xlsx("open_pj.xlsx") %>% as_tibble() %>%
 subct <- openxlsx::read.xlsx("subct.xlsx") %>% as_tibble() %>% 
   janitor::clean_names() %>% 
   select(project,subct_id = subcontract_id, start_date,
-         contract_amount, budget_days) %>% 
+         contract_amount, budget_days,subcontract_name) %>% 
   replace_na(list(contract_amount = 0,
                   budget_days = 0)) %>% 
   mutate(start_date = as.Date(start_date, origin = "1899-01-01")) %>% 
@@ -1221,10 +1235,11 @@ all_proposals <-   setwd("C:/Users/andre/OneDrive/RohosGroup/PROPOSALS") %>%
 
 # Search proposal ---------------------------------------------------------
 
+# https://stackoverflow.com/questions/12945687/read-all-worksheets-in-an-excel-workbook-into-an-r-list-with-data-frames
+
+
 search_proposal <- function(pj){ 
   
-  # https://stackoverflow.com/questions/12945687/read-all-worksheets-in-an-excel-workbook-into-an-r-list-with-data-frames
-
   proposal_folder <- setwd("C:/Users/andre/OneDrive/RohosGroup/PROPOSALS") %>%
     list.files() %>% as_tibble() %>% 
     filter(grepl(pj,value)) %>% pull()
@@ -1249,7 +1264,7 @@ search_proposal <- function(pj){
   print(direction %>% list.files())
   
   openxlsx::getSheetNames(specific_file$value) %>%
-    as_tibble() %>% print()
+    as_tibble() %>% rename(sheets = value) %>% print()
   
   setwd("C:/Users/andre/Downloads")
   
@@ -1257,3 +1272,419 @@ search_proposal <- function(pj){
 return(take_off)
 
 }
+
+
+# Check out from transactions those from ADP 
+
+adp <- transactions %>% filter(grepl("ADP",name)) %>% 
+  filter(amount >0) %>% 
+  filter(between(date, as.Date("2020-01-24"),
+                       as.Date("2021-01-24"))) %>%
+  filter(!grepl("Fees",account)) %>% 
+  filter(grepl("DL",account)) %>% 
+  mutate(memo_desc = str_replace(memo,"BUSINESS TO BUSINESS ACH ADP","")) %>%
+  mutate(description = substr(memo_desc,0,8)) %>%
+  mutate(description = str_trim(description)) %>%
+  mutate(description = str_to_lower(description)) %>% 
+  mutate(concept = case_when(str_detect(description,"tax")~"tax",
+                                 str_detect(description,"wage")~"wage",
+                                 str_detect(description,"fees")~"fees",
+                                 str_detect(description,"payr")~"fees",
+                                 TRUE ~ as.character(description))
+         ) %>% select(-memo_desc,-description,-class,-customer,-num,-balance)
+
+
+# Between thos miscathegorized ADP transactions, there was a transaction of SW
+# as an ADP payment, transactions was re-cathegorized. 
+
+# (Direct Labor), ADP transactions correct distribution.
+adp %>%
+  group_by(concept) %>% 
+  summarise(cant = n(),
+            amount = sum(amount)) %>% 
+  janitor::adorn_totals()
+
+
+# filter from ADP transactions, those directly related to Wage Pay 
+adp_wages <- adp %>% filter(grepl("WAGE PAY",memo))
+# transactions of this kind are group by date in the system and under (DL) account 
+# the total of this payments, equals 19555.19 USD, in time range of "2020-01-24"-"2021-01-24"
+# the existing time frame in this query, corresponds to: "2020-06-26" - "2021-01-22"
+
+adp_wages %>% summary()
+
+
+# Keeping this into account, we create a adp_summary file. downloading each year report.
+# the we bind rows to create only one table, and filter for the time range existing in adp_wages.
+
+# the adp_consolidated file, correspond to de direct labor paid by the company 
+# during the period range from "2020-01-24" to "2021-01-24" and it's divided by worker 
+
+
+adp_consol <- openxlsx::read.xlsx("adp_consolidated.xlsx") 
+
+ adp_consol %>%
+   mutate(date = as.Date(date,origin="1899-12-30"))
+
+
+# the proof of this analysis, it's that if we group adp_consol transactions by date,
+# and summarise the amount, the total of 19555.19 USD will match, and the number of 
+# transactions will be equivalent to the adp_wages query, 16 rows. 
+
+adp_consol %>%
+  mutate(date = as.Date(date,origin="1899-12-30")) %>% 
+  group_by(date) %>% summarise(amount = sum(net_paid)) %>% 
+  janitor::adorn_totals()
+
+# same as ::: 
+
+adp_wages %>% select(date,amount) %>%
+  arrange(date) %>% 
+  janitor::adorn_totals()
+
+# Analysis it's reproducible after refreshing the transact data. 
+
+library(ggthemes)
+chart <-
+#ggplotly( 
+transactions %>%
+  filter(grepl(interest,customer), !is.na(class)) %>% 
+  filter(grepl("Materials",account)) %>% 
+  ggplot(aes(x = date, y = amount, color = class)) +
+  
+  #geom_boxplot()
+  geom_point(size = 4)+
+  labs(title = "DoD Materials Expensed", 
+       subtitle = "Recent Projects only", 
+       caption = "50 island Rmodl, 52 T,162 S,27 F,Marina,421 South,11000 SW,53 N,89070")
+  #)
+chart + theme_economist()
+  
+# scale_colour_economist()
+
+
+
+# Examination of Direct Labor (deleted) in P&L report; contrasted with ADP 
+dld <- transactions %>% filter(grepl("(deleted)",account))
+
+
+
+
+# transformed, grouped and summarize by date range and name. 
+grouped_dld <- dld %>%
+  mutate(date_reference = ifelse(date<"2020-03-31",
+                                 "Prior to 2020-03-31",
+                                 "Prior to 2020-05-14")) %>%
+  group_by(name,date_reference) %>% 
+  summarise(amount = sum(amount),
+            .groups="drop") %>%
+  janitor::adorn_totals()
+
+
+
+# Profitability -----------------------------------------------------------
+
+
+# WC period income. example of queries
+
+# INCOME
+inc_wc <- transactions %>% filter(type=="Invoice") %>% 
+  filter(between(date,as.Date("2020-01-24"),
+                      as.Date("2021-01-24"))) %>%
+  filter(grepl("Income",account))
+
+
+# Direct Materials (DM)
+dm_wc <- transactions %>% 
+  filter(between(date,as.Date("2020-01-24"),
+                 as.Date("2021-01-24"))) %>% 
+  filter(grepl("(DM)",account)) %>% replace_na(list(amount = 0))
+
+
+
+
+# (Labor Cost)
+labor_wc <- transactions %>% 
+  filter(between(date,as.Date("2020-01-24"),
+                 as.Date("2021-01-24"))) %>% 
+  filter(grepl("Cost of Goods Sold",account)) %>%
+  replace_na(list(amount = 0))
+
+
+
+# Cost of goods sold (COGS)
+cogs_wc <- transactions %>% 
+  filter(between(date,as.Date("2020-01-24"),
+                 as.Date("2021-01-24"))) %>% 
+  filter(grepl("Cost of Goods Sold|Direct Material",account)) %>%
+  replace_na(list(amount = 0))
+
+
+
+# Task; create a long table of profits, based on transactions; where:: 
+
+# Total Income(988) - Direct Material Cost(224) = Income Labor
+# Total Cost(588) - Direct Material Cost(224)   = Labor Cost 
+# 
+# Labor Cost/ Income Labor = Labor Gross Profit 
+
+# group by date, and bring the option to observe it by month, quarter & year
+
+# Total Income         <-  type = invoices & account = Income 
+# Direct Material Cost <-  account = DM
+# Cost of Goods Sold   <-  account %in% COGDS & DM 
+
+
+profit_estimator <- function(i_date,f_date){ 
+  
+transactions <- transactions %>% filter(between(date,as.Date(i_date),as.Date(f_date)))  
+  
+# minimalist queries 
+material_income <- transactions %>% 
+  replace_na(list(amount=0)) %>% 
+  filter(grepl("Material Income:",account))
+            
+material_income_dist <- material_income %>%
+  group_by(type,date) %>%
+  summarise(n = n(),
+            amount = sum(amount),
+            .groups="drop") %>% 
+  mutate(account = "materials_income" )
+
+operational_income <- transactions %>% 
+  replace_na(list(amount=0)) %>% 
+  filter(grepl(".Operational Income:",account))
+
+operational_income_dist <- operational_income %>%
+  group_by(type,date) %>%
+  summarise(n = n(),
+            amount = sum(amount),
+            .groups="drop") %>% 
+  mutate(account = "operational_income" )
+
+direct_labor <- transactions %>% 
+  replace_na(list(amount=0)) %>% 
+  filter(grepl("Direct Labor",account))
+
+direct_labor_dist <- direct_labor %>%
+  group_by(type,date) %>%
+  summarise(n = n(),
+            amount = sum(amount),
+            .groups="drop") %>% 
+  mutate(account = "direct_labor" )
+
+
+direct_material <- transactions %>% 
+  replace_na(list(amount=0)) %>% 
+  filter(grepl("Direct Material",account))
+
+direct_material_dist <- direct_material %>%
+  group_by(type,date) %>%
+  summarise(n = n(),
+            amount = sum(amount),
+            .groups="drop") %>% 
+  mutate(account = "direct_material" )
+
+
+
+# Grouped by type commutation
+
+accounts_distribution <- operational_income_dist %>%
+  bind_rows(material_income_dist,
+            direct_labor_dist,
+            direct_material_dist) %>% 
+  mutate(year_month = as.yearmon(date, "%Y-%m")) %>% 
+  mutate(year_quarter = as.yearqtr(date, format = "%Y-%m-%d"))
+
+# RE-grouped overview 
+
+overview <- accounts_distribution %>% 
+  group_by(type,account) %>% 
+  summarise(cant = sum(n),
+            amount=sum(amount),
+            .groups = "drop") %>% 
+  arrange(account)
+
+
+
+# Sense commutation 
+cross_tibble_raw <- operational_income %>% 
+  bind_rows(material_income,
+            direct_labor,
+            direct_material)
+
+
+# Detailed Transacts classified
+profitability <-  cross_tibble_raw %>% 
+  replace_na(list(amount = 0)) %>% 
+  mutate(source = case_when(str_detect(account,"Income:")~"income",
+                            str_detect(account,"Direct Labor")~"labor_cost",
+                            str_detect(account,"Direct Material")~"material_cost",
+                            TRUE ~ as.character(account)))%>%
+  # mutate(source = ifelse(type == "Invoice","income",source)) %>% 
+  # mutate(amount = ifelse(source == "income" & amount < 0,amount*-1,amount)) %>% 
+  select(-modification_date)
+  
+
+# Sumarization & Arithmetics
+profit_resume <- profitability %>%
+  group_by(date,source) %>% 
+  summarise(amount = sum(amount),.groups = "drop") %>% 
+  ungroup() %>% 
+  mutate(year_quarter = as.yearqtr(date, format = "%Y-%m-%d")) %>% 
+  pivot_wider(names_from = source,
+              values_from = amount) %>% 
+  replace_na(list(income = 0, 'material_cost' = 0, 'labor_cost' = 0)) %>% 
+  mutate(period = substr(date,0,7)) %>% 
+  relocate(.before = date,period) %>% 
+  group_by(period,year_quarter) %>% 
+  summarise(income = sum(income),
+            material_cost = sum(material_cost),
+            labor_cost = sum(labor_cost),
+            .groups = "drop") %>% 
+  ungroup() %>% 
+  rowwise() %>% 
+  mutate(labor_income = income-material_cost) %>% 
+  mutate(total_cost = material_cost+labor_cost) %>% 
+  mutate(operational_profit = total_cost/income) %>% 
+  mutate(labor_gross_profit = labor_cost/labor_income) %>% 
+  mutate(difference = operational_profit - labor_gross_profit) %>% 
+  ungroup() %>% 
+  mutate(year_month = as.yearmon(period, "%Y-%m")) %>% 
+  relocate(.after = period,year_month)
+
+return(list(accounts_dristribution=accounts_distribution,
+            accounts_distribution_overview=overview,
+            classified_transactions = profitability,
+            resumen = profit_resume))
+
+}
+
+profit_resumen <- profit_estimator("2019-06-01","2021-03-31")$resumen
+
+quarter_profit_resumen <- profit_resumen %>% 
+  group_by(year_quarter) %>% 
+  summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE)))
+
+
+# Gross Profit by Quarter 
+quarter_gpc <- function(){
+  
+  
+  f_quarter <- max(quarter_profit_resumen$year_quarter)
+  i_quarter <- min(quarter_profit_resumen$year_quarter)
+  
+
+  quarter_gross_profit_chart <- quarter_profit_resumen %>%
+    ggplot(aes(x = year_quarter, y = operational_profit))+
+    geom_line()+
+    geom_area(color = "#91bbbf",fill="#abd3db")+
+    geom_point(size = 3,color = "#cdaed6")+
+    labs(title = "Estimated Operational Profit", 
+         subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
+         caption = "Where: Estimated Operational Profit = Total Cost/Income")
+  
+  gpc <- quarter_gross_profit_chart + theme_wsj() + scale_colour_economist()
+  
+  stats <- quarter_profit_resumen %>%
+        select(year_quarter,income,material_cost,labor_cost,
+           labor_income,total_cost,operational_profit,
+           labor_gross_profit,difference) %>% summary()
+  
+  print("Gross Profit Estimation")
+  
+  return(list(chart=gpc,stats=stats))
+}
+
+# Gross Profit Chart
+gpc <- function(){ 
+  
+  f_quarter <- max(quarter_profit_resumen$year_quarter)
+  i_quarter <- min(quarter_profit_resumen$year_quarter)
+  
+  
+gross_profit_chart <- profit_resumen %>%
+  ggplot(aes(x = year_month, y = operational_profit))+
+  geom_line()+
+  geom_area(color = "#91bbbf",fill="#abd3db")+
+  geom_point(size = 3,color = "#cdaed6")+
+    labs(title = "Estimated Operational Profit", 
+         subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
+         caption = "Where: Estimated Operational Profit = Total Cost/Income")
+
+gpc <- gross_profit_chart + theme_wsj() + scale_colour_economist()
+
+stats <- profit_resume %>%
+  mutate(date = lubridate::make_date(year=substr(period,0,4),
+                                     month = substr(period,6,7))) %>% 
+  select(date,income,material_cost,labor_cost,
+         labor_income,total_cost,operational_profit,
+         labor_gross_profit,difference) %>% summary()
+
+print("Gross Profit Estimation")
+
+return(list(chart=gpc,stats=stats))
+}
+
+# Labor Gross Profit by Quarter 
+quarter_lgpc <- function(){ 
+  
+  f_quarter <- max(quarter_profit_resumen$year_quarter)
+  i_quarter <- min(quarter_profit_resumen$year_quarter)
+  
+  labor_gross_profit_chart <- quarter_profit_resumen %>%
+    ggplot(aes(x = year_quarter, y = labor_gross_profit))+
+    geom_line()+
+    geom_area(color = "#91bbbf",fill="#abd3db")+
+    geom_point(size = 3,color = "#cdaed6")+
+    labs(title = "Estimated Operational Profit", 
+         subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
+         caption = "Where: Estimated Operational Profit = Total Cost/Income")
+  
+  lgpc <- labor_gross_profit_chart + theme_wsj() + scale_colour_economist()
+  
+  stats <- quarter_profit_resumen %>%
+    select(year_quarter,income,material_cost,labor_cost,
+           labor_income,total_cost,operational_profit,
+           labor_gross_profit,difference) %>% summary()
+  
+  print("Labor Gross Profit Estimation")
+  
+  
+  return(list(chart=lgpc,stats=stats))
+}
+
+# Labor Gross Profit Chart 
+lgpc <- function(){ 
+  
+  f_quarter <- max(quarter_profit_resumen$year_quarter)
+  i_quarter <- min(quarter_profit_resumen$year_quarter)
+  
+  
+  labor_gross_profit_chart <- profit_resumen %>%
+    ggplot(aes(x = year_month, y = labor_gross_profit))+
+    geom_line()+
+    geom_area(color = "#91bbbf",fill="#abd3db")+
+    geom_point(size = 3,color = "#cdaed6")+
+    labs(title = "Estimated Operational Profit", 
+         subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
+         caption = "Where: Estimated Operational Profit = Total Cost/Income")
+  
+  lgpc <- labor_gross_profit_chart + theme_wsj() + scale_colour_economist()
+  
+  stats <- profit_resume %>%
+    mutate(date = lubridate::make_date(year=substr(period,0,4),
+                                       month = substr(period,6,7))) %>% 
+    select(date,income,material_cost,labor_cost,
+           labor_income,total_cost,operational_profit,
+           labor_gross_profit,difference) %>% summary()
+  
+  print("Labor Gross Profit Estimation")
+  
+  
+  return(list(chart=lgpc,stats=stats))
+}
+  
+
+stats <- gpc()[[2]]
+stats %>% openxlsx::write.xlsx(.,"stats.xlsx")

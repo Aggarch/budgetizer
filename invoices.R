@@ -335,3 +335,15 @@ transactions %>% filter(num %in% c( "S00840",
   select(-create_date,-memo,-balance,-name) %>%
   filter(!is.na(account)) %>% 
   janitor::adorn_totals()
+
+
+cbt <- transactions %>% filter(type %in% c("Invoice", "Credit Memo")) %>% 
+  filter(grepl("CBT",name), grepl("Account",account)) %>% 
+  select(-memo,-split,-class,-created_by,-modification_date,-name,-balance) %>% 
+  left_join(invoices %>% select(num,open_balance), by=c("num")) %>% 
+  mutate(open_balance = ifelse(is.na(open_balance),amount,open_balance)) %>% 
+  mutate(open_balance = as.double(open_balance)) %>% 
+  separate(customer, c("client","project"),sep = "([:])") %>% 
+  select(-client) %>% arrange(project) %>% 
+  relocate(.after = project,open_balance)
+
