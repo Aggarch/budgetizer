@@ -959,11 +959,31 @@ pays %>% as_tibble() %>%
 
 
 
-# Project Analysis from ZOHO --------------------------------------------------------
 
-setwd("C:/Users/andre/Downloads")
+# By date payments distribution ------------------------------------------------------------
+
+dist_paid <- function(date){
+  data %>% filter(Payment.Date == date) %>%
+    group_by(Project,Subcontract,Subcontract.Name) %>%
+    summarise(amount = sum(Amount.Paid),.groups = "drop") %>%
+    mutate(payment_date = date) %>% 
+    relocate(.before = Project,payment_date) %>% 
+    janitor::adorn_totals()
+  
+}
 
 
+# PROJECT ANALYSIS FROM ZOHO --------------------------------------------------------
+
+
+# Wrangler ----------------------------------------------------------------
+
+
+project_report <- function(){ 
+
+  setwd("C:/Users/andre/Downloads")
+  
+  
 # Open projects in Zoho 
 open_pj <- openxlsx::read.xlsx("open_pj.xlsx") %>% as_tibble() %>% 
   select(project = Project.Name) %>% 
@@ -983,27 +1003,14 @@ subct <- openxlsx::read.xlsx("subct.xlsx") %>% as_tibble() %>%
 # Wrangling data 
 data <- openxlsx::read.xlsx("payments.xlsx") %>% as_tibble() %>% 
   mutate(Payment.Date = as.Date(Payment.Date, origin = "1899-12-30")) %>% 
-  janitor::clean_names() %>% 
-  filter(!is.na(project))%>% 
-  filter(project %in% open_pj$project)
+  janitor::clean_names() 
 
 
-# By date payments distribution ------------------------------------------------------------
+# Project Analysis Report -------------------------------------------------
 
-dist_paid <- function(date){
-data %>% filter(Payment.Date == date) %>%
-    group_by(Project,Subcontract,Subcontract.Name) %>%
-    summarise(amount = sum(Amount.Paid),.groups = "drop") %>%
-    mutate(payment_date = date) %>% 
-    relocate(.before = Project,payment_date) %>% 
-    janitor::adorn_totals()
-  
-}
-
-
-
-# Create Report of Projects 
 projects <- data %>%
+  filter(!is.na(project))%>% 
+  filter(project %in% open_pj$project) %>% 
   group_by(project, services, subcontract,
            subcontract_name, transaction_type) %>% 
   summarise(amount = sum(amount_paid),.groups = "drop") %>% 
@@ -1053,16 +1060,47 @@ names = projects %>% distinct(project) %>%
 project_analysis <- projects %>% left_join(names, by = "project") %>% 
   relocate(.before = project,projects) %>% select(-services)
 
+project_analysis_resumen <- project_analysis %>%
+  select(projects=project,subcontract_name,
+         labor_budget,labor_paid,
+         materials_budget,materials_paid) %>% 
+  rowwise() %>% 
+  mutate(total_cost_realized = sum(labor_paid+materials_paid)) %>% 
+  ungroup() %>% 
+  relocate(.before = labor_budget, total_cost_realized) %>% 
+  select(-contains("budget")) %>% 
+  rename(Projects = projects, 
+         Servicios = subcontract_name,
+         'Costo Realizado' = total_cost_realized,
+         'Costo Labor' = labor_paid,
+         'Costo Material' = materials_paid) %>% 
+  mutate('Precio de Venta' = "fill from quote lines")
+
 
 # Change of orders for open_pj with transactions history. 
 
-change_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>% 
+changed_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>% 
   as_tibble() %>% filter(Project %in% projects$project) %>% 
   mutate(co_num = paste0("CO000", Change.Order.Number)) %>% 
   janitor::clean_names() %>% 
   relocate(.after = project,co_num) %>% 
-  select(-change_order_number,-accepted,-acceptance_date) %>% 
+  select(-change_order_number,-acceptance_date) %>% 
   mutate(agreement_date = as.Date(agreement_date, origin = "1899-12-30"))
+
+return(list(transactions = data,
+            changed_orders = changed_orders,
+            project_analysis=project_analysis,
+            project_analysis_resumen=project_analysis_resumen))
+
+}
+
+# Execution 
+project_report()
+
+# Local Storage 
+date <- lubridate::today() %>% str_replace_all(.,"-","_")
+project_report() %>%
+  openxlsx::write.xlsx(., paste0(date,"_project_analysis.xlsx"),asTable = T)
 
 
   
@@ -1076,8 +1114,7 @@ change_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>%
 # APNT ::: 20%
 # INST ::: 20%
 
-date <- lubridate::today() %>% str_replace_all(.,"-","_")
-project_analysis %>% openxlsx::write.xlsx(., paste0(date,"_project_analysis.xlsx"))
+
 
 
 outflow <- openxlsx::read.xlsx("april.xlsx") %>%
