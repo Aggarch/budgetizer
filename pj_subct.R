@@ -1451,60 +1451,59 @@ profit_estimator <- function(i_date,f_date){
 transactions <- transactions %>% filter(between(date,as.Date(i_date),as.Date(f_date)))  
   
 # minimalist queries 
-material_income <- transactions %>% 
-  replace_na(list(amount=0)) %>% 
-  filter(grepl("Material Income:",account))
-            
-material_income_dist <- material_income %>%
-  group_by(type,date) %>%
-  summarise(n = n(),
-            amount = sum(amount),
-            .groups="drop") %>% 
-  mutate(account = "materials_income" )
+
 
 operational_income <- transactions %>% 
   replace_na(list(amount=0)) %>% 
-  filter(grepl(".Operational Income:",account))
+  filter(grepl(".Operational Income:",account)) 
 
-operational_income_dist <- operational_income %>%
-  group_by(type,date) %>%
-  summarise(n = n(),
-            amount = sum(amount),
-            .groups="drop") %>% 
-  mutate(account = "operational_income" )
+material_income <- transactions %>% 
+  replace_na(list(amount=0)) %>% 
+  filter(grepl("Material Income:",account))
 
 direct_labor <- transactions %>% 
   replace_na(list(amount=0)) %>% 
-  filter(grepl("Direct Labor",account))
-
-direct_labor_dist <- direct_labor %>%
-  group_by(type,date) %>%
-  summarise(n = n(),
-            amount = sum(amount),
-            .groups="drop") %>% 
-  mutate(account = "direct_labor" )
-
+  filter(grepl("Direct Labor",account)) 
 
 direct_material <- transactions %>% 
   replace_na(list(amount=0)) %>% 
-  filter(grepl("Direct Material",account))
+  filter(grepl("Direct Material",account)) 
+
+
+# Distributions -----------------------------------------------------------
+
+operational_income_dist <- operational_income %>%
+  group_by(type,date) %>%
+  summarise(n = n(),amount = sum(amount),
+            .groups="drop") %>%
+  mutate(account = "operational_income" )
+
+material_income_dist <- material_income %>%
+  group_by(type,date) %>%
+  summarise(n = n(),amount = sum(amount),
+            .groups="drop") %>%
+  mutate(account = "materials_income" )
+
+direct_labor_dist <- direct_labor %>%
+  group_by(type,date) %>%
+  summarise(n = n(),amount = sum(amount),
+            .groups="drop") %>%
+  mutate(account = "direct_labor" )
 
 direct_material_dist <- direct_material %>%
   group_by(type,date) %>%
-  summarise(n = n(),
-            amount = sum(amount),
-            .groups="drop") %>% 
+  summarise(n = n(),amount = sum(amount),
+            .groups="drop") %>%
   mutate(account = "direct_material" )
-
 
 
 # Grouped by type commutation
 
 accounts_distribution <- operational_income_dist %>%
-  bind_rows(material_income_dist,
-            direct_labor_dist,
-            direct_material_dist) %>% 
-  mutate(year_month = as.yearmon(date, "%Y-%m")) %>% 
+               bind_rows(material_income_dist,
+                         direct_labor_dist,
+                         direct_material_dist) %>%
+  mutate(year_month = as.yearmon(date, "%Y-%m")) %>%
   mutate(year_quarter = as.yearqtr(date, format = "%Y-%m-%d"))
 
 # RE-grouped overview 
@@ -1520,12 +1519,16 @@ overview <- accounts_distribution %>%
 
 # Sense commutation 
 cross_tibble_raw <- operational_income %>% 
-  bind_rows(material_income,
-            direct_labor,
-            direct_material)
+          bind_rows(material_income,
+                    direct_labor,
+                    direct_material)%>% 
+  mutate(year_month = as.yearmon(date, "%Y-%m")) %>% 
+  mutate(year_quarter = as.yearqtr(date, format = "%Y-%m-%d"))
 
 
 # Detailed Transacts classified
+
+# Acuracy contrasted using 2 diff methods.
 profitability <-  cross_tibble_raw %>% 
   replace_na(list(amount = 0)) %>% 
   mutate(source = case_when(str_detect(account,"Income:")~"income",
@@ -1534,7 +1537,7 @@ profitability <-  cross_tibble_raw %>%
                             TRUE ~ as.character(account)))%>%
   # mutate(source = ifelse(type == "Invoice","income",source)) %>% 
   # mutate(amount = ifelse(source == "income" & amount < 0,amount*-1,amount)) %>% 
-  select(-modification_date)
+   select(-modification_date)
   
 
 # Sumarization & Arithmetics
@@ -1557,9 +1560,11 @@ profit_resumen <- profitability %>%
   rowwise() %>% 
   mutate(labor_income = income-material_cost) %>% 
   mutate(total_cost = material_cost+labor_cost) %>% 
-  mutate(operational_profit = total_cost/income) %>% 
-  mutate(labor_gross_profit = labor_cost/labor_income) %>% 
-  mutate(difference = operational_profit - labor_gross_profit) %>% 
+  mutate(operational_profit = 1-(total_cost/income)) %>% 
+  mutate(labor_gross_profit = 1-(labor_cost/labor_income)) %>% 
+  mutate(operational_cost = (total_cost/income)) %>% 
+  mutate(labor_gross_cost = (labor_cost/labor_income)) %>% 
+  mutate(difference = labor_income - labor_cost) %>% 
   ungroup() %>% 
   mutate(year_month = as.yearmon(period, "%Y-%m")) %>% 
   relocate(.after = period,year_month)
@@ -1567,7 +1572,11 @@ profit_resumen <- profitability %>%
 
 quarter_profit_resumen <- profit_resumen %>% 
   group_by(year_quarter) %>% 
-  summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE)))
+  summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>% 
+    mutate(operational_profit = 1-(total_cost/income)) %>% 
+    mutate(labor_gross_profit = 1-(labor_cost/labor_income)) %>% 
+    mutate(operational_cost = (total_cost/income)) %>% 
+    mutate(labor_gross_cost = (labor_cost/labor_income))
 
 
 
@@ -1575,7 +1584,7 @@ return(list(
             classified_transactions = profitability,
             accounts_dristribution=accounts_distribution,
             accounts_distribution_overview=overview,
-            resumen = profit_resume,
+            resumen = profit_resumen,
             quarter_profit_resumen = quarter_profit_resumen
             ))
 
@@ -1584,14 +1593,16 @@ return(list(
 
 
 
-# Resource ----------------------------------------------------------------
+# Resource Execution ----------------------------------------------------------------
 
 
-data <- profit_estimator("2019-06-01","2021-03-31")
+data <- profit_estimator("2020-01-01","2021-03-31")
+
+data %>% openxlsx::write.xlsx(.,"Business_review.xlsx",asTable = T)
 
 profit_resumen = data$resumen
 
-
+quarter_profit_resumen <- data$quarter_profit_resumen
 
 # Graphics ----------------------------------------------------------------
 
@@ -1639,11 +1650,11 @@ gross_profit_chart <- profit_resumen %>%
   geom_point(size = 3,color = "#cdaed6")+
     labs(title = "Monthly Estimated Operational Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
-         caption = "Where: Estimated Operational Gross Profit = Total Cost/Income")
+         caption = "Where: Estimated Operational Gross Profit = 1-(Total Cost/Income)")
 
 gpc <- gross_profit_chart + theme_wsj() + scale_colour_economist()
 
-stats <- profit_resume %>%
+stats <- profit_resumen %>%
   mutate(date = lubridate::make_date(year=substr(period,0,4),
                                      month = substr(period,6,7))) %>% 
   select(date,income,material_cost,labor_cost,
@@ -1666,9 +1677,9 @@ quarter_lgpc <- function(){
     geom_line()+
     geom_area(color = "#91bbbf",fill="#abd3db")+
     geom_point(size = 3,color = "#cdaed6")+
-    labs(title = "Quarterly Estimated Operational Profit", 
+    labs(title = "Quarterly Estimated Labor Gross Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
-         caption = "Where: Estimated Operational Profit = Total Cost/Income")
+         caption = "Where: Labor Gross Profit = 1-(Labor Cost/Labor Income)")
   
   lgpc <- labor_gross_profit_chart + theme_wsj() + scale_colour_economist()
   
@@ -1697,7 +1708,7 @@ lgpc <- function(){
     geom_point(size = 3,color = "#cdaed6")+
     labs(title = "Monthly Estimated Operational Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
-         caption = "Where: Estimated Operational Profit = Total Cost/Income")
+         caption = "Where: Labor Gross Profit = 1-(Labor Cost/Labor Income)")
   
   lgpc <- labor_gross_profit_chart + theme_wsj() + scale_colour_economist()
   
