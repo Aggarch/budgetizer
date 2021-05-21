@@ -1382,10 +1382,12 @@ grouped_dld <- dld %>%
 
 
 
-# Profitability -----------------------------------------------------------
 
 
-# WC period income. example of queries
+
+# WC observation ----------------------------------------------------------
+
+
 
 # INCOME
 inc_wc <- transactions %>% filter(type=="Invoice") %>% 
@@ -1421,6 +1423,13 @@ cogs_wc <- transactions %>%
 
 
 
+
+
+
+
+
+# Profit Estimator --------------------------------------------------------
+
 # Task; create a long table of profits, based on transactions; where:: 
 
 # Total Income(988) - Direct Material Cost(224) = Income Labor
@@ -1433,6 +1442,8 @@ cogs_wc <- transactions %>%
 # Total Income         <-  type = invoices & account = Income 
 # Direct Material Cost <-  account = DM
 # Cost of Goods Sold   <-  account %in% COGDS & DM 
+
+
 
 
 profit_estimator <- function(i_date,f_date){ 
@@ -1527,7 +1538,7 @@ profitability <-  cross_tibble_raw %>%
   
 
 # Sumarization & Arithmetics
-profit_resume <- profitability %>%
+profit_resumen <- profitability %>%
   group_by(date,source) %>% 
   summarise(amount = sum(amount),.groups = "drop") %>% 
   ungroup() %>% 
@@ -1553,18 +1564,36 @@ profit_resume <- profitability %>%
   mutate(year_month = as.yearmon(period, "%Y-%m")) %>% 
   relocate(.after = period,year_month)
 
-return(list(accounts_dristribution=accounts_distribution,
-            accounts_distribution_overview=overview,
-            classified_transactions = profitability,
-            resumen = profit_resume))
-
-}
-
-profit_resumen <- profit_estimator("2019-06-01","2021-03-31")$resumen
 
 quarter_profit_resumen <- profit_resumen %>% 
   group_by(year_quarter) %>% 
   summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE)))
+
+
+
+return(list(
+            classified_transactions = profitability,
+            accounts_dristribution=accounts_distribution,
+            accounts_distribution_overview=overview,
+            resumen = profit_resume,
+            quarter_profit_resumen = quarter_profit_resumen
+            ))
+
+}
+
+
+
+
+# Resource ----------------------------------------------------------------
+
+
+data <- profit_estimator("2019-06-01","2021-03-31")
+
+profit_resumen = data$resumen
+
+
+
+# Graphics ----------------------------------------------------------------
 
 
 # Gross Profit by Quarter 
@@ -1580,7 +1609,7 @@ quarter_gpc <- function(){
     geom_line()+
     geom_area(color = "#91bbbf",fill="#abd3db")+
     geom_point(size = 3,color = "#cdaed6")+
-    labs(title = "Estimated Operational Profit", 
+    labs(title = "Quarterly Estimated Operational Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
          caption = "Where: Estimated Operational Profit = Total Cost/Income")
   
@@ -1591,7 +1620,7 @@ quarter_gpc <- function(){
            labor_income,total_cost,operational_profit,
            labor_gross_profit,difference) %>% summary()
   
-  print("Gross Profit Estimation")
+  print("Quarterly Gross Profit Estimation")
   
   return(list(chart=gpc,stats=stats))
 }
@@ -1608,9 +1637,9 @@ gross_profit_chart <- profit_resumen %>%
   geom_line()+
   geom_area(color = "#91bbbf",fill="#abd3db")+
   geom_point(size = 3,color = "#cdaed6")+
-    labs(title = "Estimated Operational Profit", 
+    labs(title = "Monthly Estimated Operational Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
-         caption = "Where: Estimated Operational Profit = Total Cost/Income")
+         caption = "Where: Estimated Operational Gross Profit = Total Cost/Income")
 
 gpc <- gross_profit_chart + theme_wsj() + scale_colour_economist()
 
@@ -1621,7 +1650,7 @@ stats <- profit_resume %>%
          labor_income,total_cost,operational_profit,
          labor_gross_profit,difference) %>% summary()
 
-print("Gross Profit Estimation")
+print("Monthly Gross Profit Estimation")
 
 return(list(chart=gpc,stats=stats))
 }
@@ -1637,7 +1666,7 @@ quarter_lgpc <- function(){
     geom_line()+
     geom_area(color = "#91bbbf",fill="#abd3db")+
     geom_point(size = 3,color = "#cdaed6")+
-    labs(title = "Estimated Operational Profit", 
+    labs(title = "Quarterly Estimated Operational Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
          caption = "Where: Estimated Operational Profit = Total Cost/Income")
   
@@ -1648,7 +1677,7 @@ quarter_lgpc <- function(){
            labor_income,total_cost,operational_profit,
            labor_gross_profit,difference) %>% summary()
   
-  print("Labor Gross Profit Estimation")
+  print("Quarterly Labor Gross Profit Estimation")
   
   
   return(list(chart=lgpc,stats=stats))
@@ -1666,7 +1695,7 @@ lgpc <- function(){
     geom_line()+
     geom_area(color = "#91bbbf",fill="#abd3db")+
     geom_point(size = 3,color = "#cdaed6")+
-    labs(title = "Estimated Operational Profit", 
+    labs(title = "Monthly Estimated Operational Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
          caption = "Where: Estimated Operational Profit = Total Cost/Income")
   
@@ -1679,7 +1708,7 @@ lgpc <- function(){
            labor_income,total_cost,operational_profit,
            labor_gross_profit,difference) %>% summary()
   
-  print("Labor Gross Profit Estimation")
+  print("Monthly Labor Gross Profit Estimation")
   
   
   return(list(chart=lgpc,stats=stats))
