@@ -22,6 +22,8 @@ prices <- openxlsx::read.xlsx("prices_tibble.xlsx") %>%
 # 
 
 
+# Replace 'toff' document with dynamic search proposal fucntion
+
 toff <- openxlsx::read.xlsx("toff.xlsx") %>% 
   as_tibble() %>% 
   
@@ -43,8 +45,7 @@ toff <- openxlsx::read.xlsx("toff.xlsx") %>%
   ) %>% 
   mutate(service = case_when(str_detect(service,"exterior")~"exterior_painting",
                              str_detect(service,"interior")~"interior_painting",
-                             TRUE ~ as.character(service)
-  )
+                             TRUE ~ as.character(service))
   
   )
 

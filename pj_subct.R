@@ -959,14 +959,15 @@ pays %>% as_tibble() %>%
 
 
 
-# project analysis --------------------------------------------------------
+# Project Analysis from ZOHO --------------------------------------------------------
 
 setwd("C:/Users/andre/Downloads")
 
 
 # Open projects in Zoho 
 open_pj <- openxlsx::read.xlsx("open_pj.xlsx") %>% as_tibble() %>% 
-  select(project = Project.Name)
+  select(project = Project.Name) %>% 
+  filter(!grepl("52 T|162 S|27 F",project))
 
 # All subcontracts in Zoho 
 subct <- openxlsx::read.xlsx("subct.xlsx") %>% as_tibble() %>% 
@@ -1003,7 +1004,6 @@ data %>% filter(Payment.Date == date) %>%
 
 # Create Report of Projects 
 projects <- data %>%
-  # rename(subct_id = subcontract) %>% 
   group_by(project, services, subcontract,
            subcontract_name, transaction_type) %>% 
   summarise(amount = sum(amount_paid),.groups = "drop") %>% 
@@ -1011,24 +1011,27 @@ projects <- data %>%
                            values_from = amount) %>% 
   janitor::clean_names() %>%
   replace_na(list(expense = 0, subcontract_2 = 0, 
-                  hourly_labor = 0, retainage_payment = 0))%>% 
+                  hourly_labor = 0))%>% 
   rowwise() %>% 
-  mutate(labor_paid = sum(subcontract_2,hourly_labor,retainage_payment)) %>% 
+  mutate(labor_paid = sum(subcontract_2,hourly_labor)) %>% 
   ungroup() %>% 
   rename(subct_id = subcontract,
          subcontract_payment = subcontract_2,
          materials_paid = expense) %>% 
   relocate(.before = materials_paid, labor_paid) %>%
-  left_join(subct, by = c("subct_id","project")) %>% 
+  left_join(subct %>% select(-subcontract_name),
+            by = c("subct_id","project")) %>% 
   rename(labor_budget = contract_amount) %>% 
   mutate(completion = 1) %>% 
   mutate(accrued_labor = completion * labor_budget) %>% 
   mutate(labor_ratio = 1-(labor_paid/accrued_labor)) %>% 
-  mutate(materials_budget = case_when(str_detect(services,"Dryw")~labor_budget*.4,
-                                      str_detect(services,"Fram")~labor_budget*.6,
-                                      str_detect(services,"Stuc")~labor_budget*.12,
-                                      str_detect(services,"Inst")~labor_budget*.20,
-                                      str_detect(services,"Pain")~labor_budget*.20)) %>% 
+  mutate(materials_budget = case_when(str_detect(subcontract_name,"Dryw")~labor_budget*.4,
+                                      str_detect(subcontract_name,"Fram")~labor_budget*.6,
+                                      str_detect(subcontract_name,"Stuc")~labor_budget*.12,
+                                      str_detect(subcontract_name,"Inst")~labor_budget*.20,
+                                      str_detect(subcontract_name,"Inst")~labor_budget*.20,
+                                      str_detect(subcontract_name,"Fini")~labor_budget*.15,
+                                      str_detect(subcontract_name,"Pain")~labor_budget*.20)) %>% 
   mutate(accrued_materials = completion * materials_budget) %>%
   mutate(materials_ratio = 1-(materials_paid/accrued_materials)) %>% 
   select(project, services, subct_id, subcontract_name,completion,
@@ -1048,7 +1051,7 @@ names = projects %>% distinct(project) %>%
 
 # Final Anatomy 
 project_analysis <- projects %>% left_join(names, by = "project") %>% 
-  relocate(.before = project,projects)
+  relocate(.before = project,projects) %>% select(-services)
 
 
 # Change of orders for open_pj with transactions history. 
@@ -1604,6 +1607,9 @@ profit_resumen = data$resumen
 
 quarter_profit_resumen <- data$quarter_profit_resumen
 
+
+# idea ::: create table in gt() with formatting and stylish to produce a Rmd.
+
 # Graphics ----------------------------------------------------------------
 
 
@@ -1618,7 +1624,7 @@ quarter_gpc <- function(){
   quarter_gross_profit_chart <- quarter_profit_resumen %>%
     ggplot(aes(x = year_quarter, y = operational_profit))+
     geom_line()+
-    geom_area(color = "#91bbbf",fill="#abd3db")+
+    geom_area(color = "#91bbbf",fill="#d7eff7")+
     geom_point(size = 3,color = "#cdaed6")+
     labs(title = "Quarterly Estimated Operational Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
@@ -1646,13 +1652,13 @@ gpc <- function(){
 gross_profit_chart <- profit_resumen %>%
   ggplot(aes(x = year_month, y = operational_profit))+
   geom_line()+
-  geom_area(color = "#91bbbf",fill="#abd3db")+
+  geom_area(color = "#91bbbf",fill="#d7eff7")+
   geom_point(size = 3,color = "#cdaed6")+
     labs(title = "Monthly Estimated Operational Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
          caption = "Where: Estimated Operational Gross Profit = 1-(Total Cost/Income)")
 
-gpc <- gross_profit_chart + theme_wsj() + scale_colour_economist()
+gpc <- gross_profit_chart + theme_economist_white() + scale_colour_economist()
 
 stats <- profit_resumen %>%
   mutate(date = lubridate::make_date(year=substr(period,0,4),
@@ -1675,7 +1681,7 @@ quarter_lgpc <- function(){
   labor_gross_profit_chart <- quarter_profit_resumen %>%
     ggplot(aes(x = year_quarter, y = labor_gross_profit))+
     geom_line()+
-    geom_area(color = "#91bbbf",fill="#abd3db")+
+    geom_area(color = "#91bbbf",fill="#d7eff7")+
     geom_point(size = 3,color = "#cdaed6")+
     labs(title = "Quarterly Estimated Labor Gross Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
@@ -1704,7 +1710,7 @@ lgpc <- function(){
   labor_gross_profit_chart <- profit_resumen %>%
     ggplot(aes(x = year_month, y = labor_gross_profit))+
     geom_line()+
-    geom_area(color = "#91bbbf",fill="#abd3db")+
+    geom_area(color = "#91bbbf",fill="#d7eff7")+
     geom_point(size = 3,color = "#cdaed6")+
     labs(title = "Monthly Estimated Operational Profit", 
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
