@@ -1074,7 +1074,12 @@ project_analysis_resumen <- project_analysis %>%
          'Costo Realizado' = total_cost_realized,
          'Costo Labor' = labor_paid,
          'Costo Material' = materials_paid) %>% 
-  mutate('Precio de Venta' = "fill from quote lines")
+  mutate('Precio de Venta' = "fill from quote lines") %>% 
+  relocate(.after = Servicios, 'Precio de Venta') %>% 
+  mutate(Resultado = '(PdV - CR)') %>% 
+  mutate(Retorno = '1-(CR/PdV)') %>% 
+  relocate(.after = 'Costo Realizado',Resultado) %>% 
+  relocate(.after = Resultado, Retorno)
 
 
 # Change of orders for open_pj with transactions history. 
@@ -1087,10 +1092,13 @@ changed_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>%
   select(-change_order_number,-acceptance_date) %>% 
   mutate(agreement_date = as.Date(agreement_date, origin = "1899-12-30"))
 
-return(list(transactions = data,
-            changed_orders = changed_orders,
+return(list(
+            project_analysis_resumen=project_analysis_resumen,
             project_analysis=project_analysis,
-            project_analysis_resumen=project_analysis_resumen))
+            changed_orders = changed_orders,
+            transactions = data
+            
+))
 
 }
 
@@ -1484,11 +1492,14 @@ cogs_wc <- transactions %>%
 # Cost of Goods Sold   <-  account %in% COGDS & DM 
 
 
+# Download and clean data 
+transact <- cleaner("transactions")
 
 
 profit_estimator <- function(i_date,f_date){ 
   
-transactions <- transactions %>% filter(between(date,as.Date(i_date),as.Date(f_date)))  
+
+transactions <- transact %>% filter(between(date,as.Date(i_date),as.Date(f_date))) %>% as_tibble()
   
 # minimalist queries 
 
@@ -1496,6 +1507,10 @@ transactions <- transactions %>% filter(between(date,as.Date(i_date),as.Date(f_d
 operational_income <- transactions %>% 
   replace_na(list(amount=0)) %>% 
   filter(grepl(".Operational Income:",account)) 
+
+billable_income <- transactions %>% 
+  replace_na(list(amount=0)) %>% 
+  filter(grepl("Billable",account)) 
 
 material_income <- transactions %>% 
   replace_na(list(amount=0)) %>% 
@@ -1695,7 +1710,7 @@ gross_profit_chart <- profit_resumen %>%
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
          caption = "Where: Estimated Operational Gross Profit = 1-(Total Cost/Income)")
 
-gpc <- gross_profit_chart + theme_economist_white() + scale_colour_economist()
+gpc <- gross_profit_chart + theme_wsj() + scale_colour_economist()
 
 stats <- profit_resumen %>%
   mutate(date = lubridate::make_date(year=substr(period,0,4),
@@ -1755,7 +1770,7 @@ lgpc <- function(){
   
   lgpc <- labor_gross_profit_chart + theme_wsj() + scale_colour_economist()
   
-  stats <- profit_resume %>%
+  stats <- profit_resumen %>%
     mutate(date = lubridate::make_date(year=substr(period,0,4),
                                        month = substr(period,6,7))) %>% 
     select(date,income,material_cost,labor_cost,
