@@ -1559,7 +1559,7 @@ direct_material_dist <- direct_material %>%
   group_by(type,date) %>%
   summarise(n = n(),amount = sum(amount),
             .groups="drop") %>%
-  mutate(account = "direct_material" )
+  mutate(account = "direct_material")
 
 
 # Grouped by type commutation
@@ -1654,15 +1654,22 @@ quarter_profit_resumen <- profit_resumen %>%
     mutate(net_result = sum(net_result)) %>% 
   ungroup() %>% relocate(.after = difference,expenses)
 
+income_distribution <- profitability  %>%
+  filter(source == "income") %>% 
+  group_by(year_quarter,customer) %>%
+  summarise(amount = sum(amount),.groups = "drop") %>% 
+  filter(amount != 0, !is.na(customer))
+
 
 
 return(list(
+            quarter_profit_resumen = quarter_profit_resumen,
+            resumen = profit_resumen,
+            income_distribution = income_distribution,
             classified_transactions = profitability,
             accounts_dristribution=accounts_distribution,
-            accounts_distribution_overview=overview,
-            resumen = profit_resumen,
-            quarter_profit_resumen = quarter_profit_resumen
-            ))
+            accounts_distribution_overview=overview
+                      ))
 
 }
 
@@ -1672,7 +1679,7 @@ return(list(
 # Resource Execution ----------------------------------------------------------------
 
 
-data <- profit_estimator("2020-01-01","2021-03-31")
+data <- profit_estimator("2019-01-01","2021-05-24")
 
 data %>% openxlsx::write.xlsx(.,"Business_review.xlsx",asTable = T)
 
