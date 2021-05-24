@@ -1493,13 +1493,19 @@ cogs_wc <- transactions %>%
 
 
 # Download and clean data 
-transact <- cleaner("transactions")
+
+#transact <- cleaner("transactions")
+#exp <- cleaner("expenses")
+
+
 
 
 profit_estimator <- function(i_date,f_date){ 
   
+  
+expenses_vector <- exp %>%  distinct(account) %>% pull(account)
 
-transactions <- transact %>% filter(between(date,as.Date(i_date),as.Date(f_date))) %>% as_tibble()
+transactions <- transactions %>% filter(between(date,as.Date(i_date),as.Date(f_date))) %>% as_tibble()
   
 # minimalist queries 
 
@@ -1523,6 +1529,10 @@ direct_labor <- transactions %>%
 direct_material <- transactions %>% 
   replace_na(list(amount=0)) %>% 
   filter(grepl("Direct Material",account)) 
+
+expenses <- transactions %>% filter(account %in% expenses_vector) %>% 
+  replace_na(list(amount=0))
+  
 
 
 # Distributions -----------------------------------------------------------
@@ -1576,7 +1586,9 @@ overview <- accounts_distribution %>%
 cross_tibble_raw <- operational_income %>% 
           bind_rows(material_income,
                     direct_labor,
-                    direct_material)%>% 
+                    direct_material,
+                    billable_income,
+                    expenses)%>% 
   mutate(year_month = as.yearmon(date, "%Y-%m")) %>% 
   mutate(year_quarter = as.yearqtr(date, format = "%Y-%m-%d"))
 
@@ -1587,12 +1599,14 @@ cross_tibble_raw <- operational_income %>%
 profitability <-  cross_tibble_raw %>% 
   replace_na(list(amount = 0)) %>% 
   mutate(source = case_when(str_detect(account,"Income:")~"income",
+                            str_detect(account,"Billable")~"income",
                             str_detect(account,"Direct Labor")~"labor_cost",
                             str_detect(account,"Direct Material")~"material_cost",
                             TRUE ~ as.character(account)))%>%
   # mutate(source = ifelse(type == "Invoice","income",source)) %>% 
   # mutate(amount = ifelse(source == "income" & amount < 0,amount*-1,amount)) %>% 
-   select(-modification_date)
+   select(-modification_date) %>% 
+   mutate(source = ifelse(account %in% expenses_vector,"expense",source))
   
 
 # Sumarization & Arithmetics
@@ -1603,13 +1617,14 @@ profit_resumen <- profitability %>%
   mutate(year_quarter = as.yearqtr(date, format = "%Y-%m-%d")) %>% 
   pivot_wider(names_from = source,
               values_from = amount) %>% 
-  replace_na(list(income = 0, 'material_cost' = 0, 'labor_cost' = 0)) %>% 
+  replace_na(list(income = 0, 'material_cost' = 0, 'labor_cost' = 0,expense=0)) %>% 
   mutate(period = substr(date,0,7)) %>% 
   relocate(.before = date,period) %>% 
   group_by(period,year_quarter) %>% 
   summarise(income = sum(income),
             material_cost = sum(material_cost),
             labor_cost = sum(labor_cost),
+            expenses = sum(expense),
             .groups = "drop") %>% 
   ungroup() %>% 
   rowwise() %>% 
@@ -1620,9 +1635,11 @@ profit_resumen <- profitability %>%
   mutate(operational_cost = (total_cost/income)) %>% 
   mutate(labor_gross_cost = (labor_cost/labor_income)) %>% 
   mutate(difference = labor_income - labor_cost) %>% 
+  mutate(net_result = difference - expenses) %>% 
   ungroup() %>% 
   mutate(year_month = as.yearmon(period, "%Y-%m")) %>% 
-  relocate(.after = period,year_month)
+  relocate(.after = period,year_month) %>% 
+  relocate(.after = difference, expenses)
 
 
 quarter_profit_resumen <- profit_resumen %>% 
@@ -1631,7 +1648,11 @@ quarter_profit_resumen <- profit_resumen %>%
     mutate(operational_profit = 1-(total_cost/income)) %>% 
     mutate(labor_gross_profit = 1-(labor_cost/labor_income)) %>% 
     mutate(operational_cost = (total_cost/income)) %>% 
-    mutate(labor_gross_cost = (labor_cost/labor_income))
+    mutate(labor_gross_cost = (labor_cost/labor_income)) %>% 
+  ungroup() %>% 
+  rowwise() %>% 
+    mutate(net_result = sum(net_result)) %>% 
+  ungroup() %>% relocate(.after = difference,expenses)
 
 
 
@@ -1658,6 +1679,7 @@ data %>% openxlsx::write.xlsx(.,"Business_review.xlsx",asTable = T)
 profit_resumen = data$resumen
 
 quarter_profit_resumen <- data$quarter_profit_resumen
+
 
 
 # idea ::: create table in gt() with formatting and stylish to produce a Rmd.
@@ -1783,6 +1805,63 @@ lgpc <- function(){
   return(list(chart=lgpc,stats=stats))
 }
   
+# Monthly Net Profit Chart
+netpc <- function(){ 
+  
+  f_quarter <- max(quarter_profit_resumen$year_quarter)
+  i_quarter <- min(quarter_profit_resumen$year_quarter)
+  
+  
+  net_profit_chart <- profit_resumen %>%
+    ggplot(aes(x = year_month, y = net_result))+
+    geom_col(color = "#91bbbf",fill="#d7eff7")+
+    labs(title = "Monthly Estimated Net Profit", 
+         subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
+         caption = "Where: Estimated Operational Gross Profit = 1-(Total Cost/Income)")
+  
+  netpc <- net_profit_chart + theme_wsj() + scale_colour_economist()
+  
+  stats <- profit_resumen %>%
+    mutate(date = lubridate::make_date(year=substr(period,0,4),
+                                       month = substr(period,6,7))) %>% 
+    select(date,income,material_cost,labor_cost,
+           labor_income,total_cost,operational_profit,
+           labor_gross_profit,difference) %>% summary()
+  
+  print("Monthly Gross Profit Estimation")
+  
+  return(list(chart=netpc,stats=stats))
+}
+
+# Monthly Net Profit Chart
+quarter_netpc <- function(){ 
+  
+  f_quarter <- max(quarter_profit_resumen$year_quarter)
+  i_quarter <- min(quarter_profit_resumen$year_quarter)
+  
+  
+  net_profit_chart <- quarter_profit_resumen %>%
+    ggplot(aes(x = year_quarter, y = net_result))+
+    geom_col(color = "#91bbbf",fill="#d7eff7")+
+    labs(title = "Quarterly Estimated Net Profit", 
+         subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
+         caption = "Where: Estimated Net Profit = 1-(Total Cost/Income)")
+  
+  netpc <- net_profit_chart + theme_wsj() + scale_colour_economist()
+  
+  stats <- profit_resumen %>%
+    mutate(date = lubridate::make_date(year=substr(period,0,4),
+                                       month = substr(period,6,7))) %>% 
+    select(date,income,material_cost,labor_cost,
+           labor_income,total_cost,operational_profit,
+           labor_gross_profit,difference) %>% summary()
+  
+  print("Monthly Gross Profit Estimation")
+  
+  return(list(chart=netpc,stats=stats))
+}
+
+
 
 stats <- gpc()[[2]]
 stats %>% openxlsx::write.xlsx(.,"stats.xlsx")
