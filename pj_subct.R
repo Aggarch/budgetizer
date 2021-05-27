@@ -992,8 +992,8 @@ open_pj <- openxlsx::read.xlsx("open_pj.xlsx") %>% as_tibble() %>%
 # All subcontracts in Zoho 
 subct <- openxlsx::read.xlsx("subct.xlsx") %>% as_tibble() %>% 
   janitor::clean_names() %>% 
-  select(project,subct_id = subcontract_id, start_date,
-         contract_amount, budget_days,subcontract_name) %>% 
+  select(project,subct_id = controlabor_id, start_date,
+         contract_amount, budget_days,subcontract_name = controlabor_name) %>% 
   replace_na(list(contract_amount = 0,
                   budget_days = 0)) %>% 
   mutate(start_date = as.Date(start_date, origin = "1899-01-01")) %>% 
@@ -1003,7 +1003,10 @@ subct <- openxlsx::read.xlsx("subct.xlsx") %>% as_tibble() %>%
 # Wrangling data 
 data <- openxlsx::read.xlsx("payments.xlsx") %>% as_tibble() %>% 
   mutate(Payment.Date = as.Date(Payment.Date, origin = "1899-12-30")) %>% 
-  janitor::clean_names() 
+  janitor::clean_names() %>% 
+  rename(subcontract_name = controlabor_name,
+         subcontract = controlabor)
+  
 
 
 # Project Analysis Report -------------------------------------------------

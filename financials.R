@@ -217,7 +217,13 @@ profit_estimator <- function(i_date,f_date){
 
 data <- profit_estimator("2019-01-01","2021-05-26")
 
-data %>% openxlsx::write.xlsx(.,"Business_review.xlsx",asTable = T)
+
+# Local Storage 
+date <- lubridate::today() %>% str_replace_all(.,"-","_")
+
+data %>%
+  openxlsx::write.xlsx(., paste0(date,"_Business_review.xlsx"),asTable = T)
+
 
 profit_resumen = data$resumen
 
