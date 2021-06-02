@@ -199,7 +199,7 @@ profit_estimator <- function(i_date,f_date){
   
   return(list(
     quarter_profit_resumen = quarter_profit_resumen,
-    resumen = profit_resumen,
+    monthly_profit_resumen = profit_resumen,
     income_distribution = income_distribution,
     expenses_distribution = expenses_distribution,
     classified_transactions = profitability,
@@ -215,7 +215,7 @@ profit_estimator <- function(i_date,f_date){
 # Resource Execution ----------------------------------------------------------------
 
 
-data <- profit_estimator("2019-01-01","2021-05-26")
+data <- profit_estimator("2019-01-01","2021-06-01")
 
 
 # Local Storage 
@@ -225,7 +225,7 @@ data %>%
   openxlsx::write.xlsx(., paste0(date,"_Business_review.xlsx"),asTable = T)
 
 
-profit_resumen = data$resumen
+profit_resumen = data$monthly_profit_resumen
 
 quarter_profit_resumen <- data$quarter_profit_resumen
 
@@ -412,6 +412,78 @@ quarter_netpc <- function(){
   return(list(chart=netpc,stats=stats))
 }
 
+# Monthly Total Income Vs Total Cost
+netdif <- function(){ 
+  
+  f_quarter <- max(quarter_profit_resumen$year_quarter)
+  i_quarter <- min(quarter_profit_resumen$year_quarter)
+  
+  
+  dif = ggplot(profit_resumen %>% filter(year_quarter > "2020 Q1"), aes(x=year_month)) + 
+    geom_line(aes(y = total_cost), color = "darkred",size = 2) + 
+    geom_line(aes(y = income), color="steelblue",size = 2, linetype="twodash")+
+    labs(title = "Income vs Total Cost", 
+         subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
+         caption = "Where: Income = Total Invoiced, Cost = Materials + Labor Costs")
+  
+  netdif <- dif + theme_wsj() + scale_colour_economist()
+  
+ 
+  print("Monthly Income Vs Cost")
+  
+  return(list(chart=netdif))
+}
+
+# Monthly Labor Income Vs Labor Cost
+netdif_lab <- function(){ 
+  
+  f_quarter <- max(quarter_profit_resumen$year_quarter)
+  i_quarter <- min(quarter_profit_resumen$year_quarter)
+  
+  
+  dif = ggplot(profit_resumen %>% filter(year_quarter > "2020 Q1"), aes(x=year_month)) + 
+    geom_line(aes(y = labor_cost), color = "darkred",size = 2) + 
+    geom_line(aes(y = labor_income), color="steelblue",size = 2, linetype="twodash")+
+    labs(title = "Labor Income vs Labor Cost", 
+         subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
+         caption = "Where: Labor Income = Invoiced - Material Cost ")
+  
+  netdif <- dif + theme_wsj() + scale_colour_economist()
+  
+  
+  print("Monthly Labor Income Vs Labor Cost")
+  
+  return(list(chart=netdif))
+}
+
+# Monthly Labor Income Vs Labor Cost
+total_net <- function(){ 
+  
+  f_quarter <- max(quarter_profit_resumen$year_quarter)
+  i_quarter <- min(quarter_profit_resumen$year_quarter)
+  
+  
+  dif = ggplot(profit_resumen %>% filter(year_quarter > "2020 Q1"), aes(x=year_month)) + 
+    geom_col(aes(y = net_result), color="steelblue",size = 2, linetype="twodash",fill="steelblue")+
+
+    
+    labs(title = "Result", 
+         subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
+         caption = "Where: Labor Income = Invoiced - Material Cost ")
+  
+  netdif <- dif + theme_wsj() + scale_colour_economist()
+  
+  
+  print("Monthly Labor Income Vs Labor Cost")
+  
+  return(list(chart=netdif))
+}
+
+
+
+
+
+
 
 stats <- gpc()[[2]]
 stats %>% openxlsx::write.xlsx(.,"stats.xlsx")
@@ -506,3 +578,87 @@ return(list(expend=expend,
 
 data <- expenses_analysis()
 data %>% openxlsx::write.xlsx(.,"expenses_analysis.xlsx",asTable = T)
+
+
+# State of Account --------------------------------------------------------
+
+
+# data ::: 
+# transact <- cleaner("transactions")
+# invoices <- cleaner("invo") 
+
+
+state_of_account <- function(clue){ 
+  
+  openb <- invoices %>% 
+    filter(grepl(clue,name)) %>% 
+    select(-memo) %>% 
+    mutate(open_balance = as.double(open_balance)) %>% 
+    select(-creation_date, - modification_date,-created_by)
+  
+  
+  
+  detailed <- transact %>%
+    filter(type == "Invoice") %>%
+    filter(grepl(clue,name)) %>% 
+    filter(!is.na(account)) %>% 
+    filter(!grepl("Receiv",account)) %>% 
+    separate(name, c("client","project"),sep = "([:])") %>% 
+    separate(account, c("income","service"),sep = "([:])") %>% 
+    select(-memo,-class, -customer, -balance,-split) %>%
+    mutate(income = str_replace(income, ".","")) %>% 
+    mutate(income = case_when(str_detect(income,"Operat")~"operational",
+                              str_detect(income,"aterial")~"material")) %>% 
+    mutate(service = str_to_lower(service)) %>% 
+    mutate(service = str_replace(service, "income","")) %>% 
+    mutate(service = str_trim(service)) %>% 
+    select(-creation_date, - modification_date,-created_by)
+  
+  
+  
+  compacted <- detailed %>% 
+    left_join(openb %>% 
+                select(num,open_balance), by="num") %>% 
+    mutate(service = ifelse(service =="materials",
+                            lag(service),service)) %>% 
+    mutate(service = ifelse(service =="materials",
+                            lag(service),service)) 
+  
+  
+  compacted_grouped <- compacted %>%
+    group_by(project,num) %>% 
+    summarise(amount = sum(amount),
+              open_balance = last(open_balance),
+              .groups = "drop") %>%
+    filter(!grepl("142",project)) %>% 
+    janitor::adorn_totals()
+  
+  
+  return(list(openb = openb,
+              detailed = detailed,
+              compacted = compacted,
+              compacted_grouped = compacted_grouped
+  ))
+  
+}
+
+
+# 421 SH House state of account up to date. 
+sh <- state_of_account("421")
+  
+sh$openb %>% select(-due_date) %>% 
+  separate(name, c("client","project"),sep = "([:])") %>% 
+  janitor::clean_names(case = "title") %>% 
+  rename(Reference = Num) %>% 
+  mutate(Service = case_when(str_detect(Project,"421 S Harbor")~"Stucco",
+                             str_detect(Project,"Additional")~"Additionals",
+                             str_detect(Project,"Painting")~"Painting",
+                             TRUE ~ as.character(Project))) %>% 
+  arrange(Project,Date) %>% relocate(.before = Amount,Service) %>% select(-Type) %>% 
+  mutate(Client = ifelse(Client == "Greenhaus Design-build, Inc.","Greenhaus",Client)) %>% 
+  openxlsx::write.xlsx(.,"updated.xlsx")
+ 
+sh$openb %>% distinct()
+
+
+

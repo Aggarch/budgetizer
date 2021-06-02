@@ -246,19 +246,32 @@ check <- openxlsx::read.xlsx("checking.xlsx") %>% as_tibble() %>%
 
 
 
-# CBT state of account ----------------------------------------------------
+# State of account ----------------------------------------------------
+
+transact %>% 
+  filter(name %in% named) %>% 
+  filter(amount >0, !grepl("Accounts R",account)) %>%
+  group_by(name,type) %>% 
+  summarise(amount = sum(amount))
 
 
-cbt_openb <- invoices %>% 
-  filter(grepl("CBT",name)) %>% 
+
+# transact <- cleaner("transactions")
+# invoices   <- cleaner("invo") 
+
+state_of_account <- function(clue){ 
+
+openb <- invoices %>% 
+  filter(grepl(clue,name)) %>% 
   select(-memo) %>% 
-  mutate(open_balance = as.double(open_balance))
+  mutate(open_balance = as.double(open_balance)) %>% 
+  select(-creation_date, - modification_date,-created_by)
   
 
 
-cbt_detailed <- transactions %>%
+detailed <- transact %>%
   filter(type == "Invoice") %>%
-  filter(grepl("CBT",name)) %>% 
+  filter(grepl(clue,name)) %>% 
   filter(!is.na(account)) %>% 
   filter(!grepl("Receiv",account)) %>% 
   separate(name, c("client","project"),sep = "([:])") %>% 
@@ -269,11 +282,13 @@ cbt_detailed <- transactions %>%
                             str_detect(income,"aterial")~"material")) %>% 
   mutate(service = str_to_lower(service)) %>% 
   mutate(service = str_replace(service, "income","")) %>% 
-  mutate(service = str_trim(service))
+  mutate(service = str_trim(service)) %>% 
+  select(-creation_date, - modification_date,-created_by)
 
 
-cbt_compacted <- cbt_detailed %>% 
-  left_join(cbt_openb %>% 
+
+compacted <- detailed %>% 
+  left_join(openb %>% 
               select(num,open_balance), by="num") %>% 
   mutate(service = ifelse(service =="materials",
                           lag(service),service)) %>% 
@@ -281,7 +296,7 @@ cbt_compacted <- cbt_detailed %>%
                           lag(service),service)) 
 
 
-cbt_compacted %>%
+compacted_grouped <- compacted %>%
   group_by(project,num) %>% 
   summarise(amount = sum(amount),
             open_balance = last(open_balance),
@@ -289,6 +304,14 @@ cbt_compacted %>%
   filter(!grepl("142",project)) %>% 
   janitor::adorn_totals()
 
+
+return(list(openb = openb,
+       detailed = detailed,
+       compacted = compacted,
+       compacted_grouped = compacted_grouped
+       ))
+
+}
 
 # Exclude the 142 seminole & reorganize ::: 
 
