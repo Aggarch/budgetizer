@@ -6,7 +6,7 @@
 # Total Income(988) - Direct Material Cost(224) = Income Labor
 # Total Cost(588) - Direct Material Cost(224)   = Labor Cost 
 # 
-# Labor Cost/ Income Labor = Labor Gross Profit 
+# 1-(Labor Cost/ Income Labor) = Labor Gross Profit 
 
 # group by date, and bring the option to observe it by month, quarter & year
 
@@ -17,15 +17,39 @@
 
 # Download and clean data 
 
-transact <- cleaner("transactions")
-exp      <- cleaner("expenses")
-
 
 library(tidyverse)
 library(lubridate)
 library(zoo)
 
 setwd("C:/Users/andre/Downloads")
+
+
+master_clean <- function(){
+  
+  
+  transact <- cleaner("transactions")
+  exp      <- cleaner("expenses")
+  invoices <- cleaner("invo")
+  
+  return(list(transact=transact,
+              exp = exp,
+              invoices = invoices))
+  
+}
+
+# Call function
+raw_data <- master_clean()
+
+# Split data 
+transact <- raw_data$transact
+exp <- raw_data$exp
+invoices <- raw_data$invoices
+
+
+
+# Recursive functions  ----------------------------------------------------
+
 
 
 profit_estimator <- function(i_date,f_date){ 
@@ -215,7 +239,7 @@ profit_estimator <- function(i_date,f_date){
 # Resource Execution ----------------------------------------------------------------
 
 
-data <- profit_estimator("2019-01-01","2021-06-01")
+data <- profit_estimator("2019-01-01","2021-06-08")
 
 
 # Local Storage 
@@ -495,33 +519,15 @@ stats %>% openxlsx::write.xlsx(.,"stats.xlsx")
 
 
 
-expenses_analysis <- function(){ 
+expenses_analysis <- function(limit){ 
 
 expend <- records %>%
-   filter(between(date,as.Date("2021-01-01"),
-                  as.Date("2021-04-30"))) %>% 
+  filter(date >= limit) %>% 
   filter(source == "expense")
 
 
-expenses_distribution <- expend %>%
-  group_by(year_month,account) %>% 
-  summarise(amount = sum(amount),.groups = "drop") %>% 
-  pivot_wider(names_from = year_month, values_from = amount) %>% 
-  separate(account, c("main_account","sub_account"),sep = "([:])") %>% 
-  ungroup() %>%
-  janitor::clean_names() %>% 
-  replace_na(list(main_account = "unknown",sub_account="none",
-                  jan_2021 = 0, feb_2021 = 0, mar_2021 = 0, apr_2021 = 0)) %>% 
-  group_by(main_account) %>% 
-  summarise(jan_2021 = sum(jan_2021),feb_2021 = sum(feb_2021),
-            mar_2021 = sum(mar_2021),apr_2021= sum(apr_2021)) %>% 
-  filter(main_account != "Ask Accountant") %>% 
-  ungroup() 
-
-
-  
-expenses_distribution_comp <- records %>%
-  filter(date >= "2020-01-01") %>% 
+expenses_distribution <- records %>%
+  filter(date >= limit) %>% 
   filter(source == "expense") %>%
   group_by(year_month,account) %>% 
   summarise(amount = sum(amount),.groups = "drop") %>% 
@@ -536,7 +542,7 @@ expenses_distribution_comp <- records %>%
   filter(main_account != "Ask Accountant")
 
 expenses_month <- 
-  expenses_distribution_comp %>% 
+  expenses_distribution %>% 
   pivot_longer(!main_account,
                names_to = "period",
                values_to = "amount") %>% 
@@ -548,35 +554,39 @@ expenses_month <-
 
 account_dist <- function(account_name){ 
 
-account_zoom <- records %>% 
-  filter(between(date, as.Date("2021-01-01"),
-                       as.Date("2021-04-30"))) %>% 
-  filter(source == "expense") %>%
+account_zoom <- expend %>% 
   filter(grepl(account_name,account)) %>%
   group_by(year_month,account) %>%
   summarise(amount = sum(amount),.groups = "drop") %>% 
   pivot_wider(names_from = year_month, values_from = amount) %>% 
-  mutate_all(funs(replace(., is.na(.), 0))) 
+  mutate_all(funs(replace(., is.na(.), 0))) %>%
+  rowwise() %>% 
+  mutate(all_period_sum = rowSums(across(where(is.numeric))))%>% 
+  arrange(desc(account,all_period_sum)) %>% 
+  ungroup()
+
 
 return(account_zoom)
   
 }
 
 data_accounts <- map(expenses_distribution$main_account, account_dist) %>% 
-                 map_dfr(., bind_rows) %>% distinct()                                
+                 map_dfr(., bind_rows) %>% distinct() %>% 
+                 janitor::clean_names()%>%   
+                 mutate_all(funs(replace(., is.na(.),0))) %>% 
+                 distinct()
 
 
 
 return(list(expend=expend,
             data_accounts = data_accounts,
             expenses_month=expenses_month,
-            expenses_distribution=expenses_distribution,
-            expenses_distribution_comp=expenses_distribution_comp)) 
+            expenses_distribution=expenses_distribution)) 
 
 }
 
 
-data <- expenses_analysis()
+data <- expenses_analysis("2021-01-01")
 data %>% openxlsx::write.xlsx(.,"expenses_analysis.xlsx",asTable = T)
 
 
@@ -585,6 +595,7 @@ data %>% openxlsx::write.xlsx(.,"expenses_analysis.xlsx",asTable = T)
 
 # data ::: 
 # transact <- cleaner("transactions")
+# exp      <- cleaner("expenses")
 # invoices <- cleaner("invo") 
 
 

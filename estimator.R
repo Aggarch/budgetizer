@@ -138,6 +138,11 @@ transactions %>% filter(num %in% pump$num)
 
 
 
+prices <- openxlsx::read.xlsx("prices_tibble.xlsx") %>% as_tibble()
 
+ns <- prices %>% filter(service == "stucco") %>% filter(grepl("1",thickness)) %>% mutate(thickness = '7/8\"')
 
+prices <- prices %>% bind_rows(ns)
+
+prices <- prices %>% filter(difficulty != 4)
 

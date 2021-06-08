@@ -992,7 +992,7 @@ open_pj <- openxlsx::read.xlsx("open_pj.xlsx") %>% as_tibble() %>%
 # All subcontracts in Zoho 
 subct <- openxlsx::read.xlsx("subct.xlsx") %>% as_tibble() %>% 
   janitor::clean_names() %>% 
-  select(project,subct_id = controlabor_id, start_date,
+  select(project,subct_id = controlabor_id,
          contract_amount, budget_days,subcontract_name = controlabor_name) %>% 
   replace_na(list(contract_amount = 0,
                   budget_days = 0)) %>% 
@@ -1119,6 +1119,9 @@ project_report() %>%
 # ControLabor -------------------------------------------------------------
 
 
+report_projects <- function(){ 
+
+
 setwd("C:/Users/andre/Downloads")
 
 
@@ -1136,17 +1139,16 @@ clab <- openxlsx::read.xlsx("clab.xlsx")%>% as_tibble() %>%
 
 data <- openxlsx::read.xlsx("payments.xlsx") %>% as_tibble() %>% 
   mutate(Payment.Date = as.Date(Payment.Date, origin = "1899-12-30")) %>% 
-  janitor::clean_names()
-
-projects <- data %>%
+  janitor::clean_names() %>%
   filter(!is.na(project))%>% 
-  filter(project %in% open_pj$project) %>% 
-  group_by(project, services, controlabor,
+  filter(project %in% open_pj$project)
+
+projects <- data %>% 
+  group_by(project, controlabor,
            controlabor_name, transaction_type) %>% 
   summarise(amount = sum(amount_paid),.groups = "drop") %>% 
   pivot_wider(names_from = transaction_type, 
               values_from = amount) %>% 
-  select(-services) %>% 
   janitor::clean_names() %>%
   replace_na(list(expense = 0, subcontract = 0, 
                   hourly_labor = 0))%>% 
@@ -1160,7 +1162,7 @@ projects <- data %>%
          labor_budget = labor_amount, labor_paid,
          materials_budget = materials, material_paid)
 
-changed_orders <- openxlsx::read.xlsx("orders_changed.xlsx") %>% 
+changed_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>% 
   as_tibble() %>% filter(Project %in% projects$project) %>% 
   mutate(co_num = paste0("CO000", Change.Order.Number)) %>% 
   janitor::clean_names() %>% 
@@ -1168,9 +1170,16 @@ changed_orders <- openxlsx::read.xlsx("orders_changed.xlsx") %>%
   select(-change_order_number,-acceptance_date) %>% 
   mutate(agreement_date = as.Date(agreement_date, origin = "1899-12-30"))
 
+
+return(list(data = data,
+            project_analysis = projects,
+            changed_orders = changed_orders))
+
+}
+
 # Local Storage 
 date <- lubridate::today() %>% str_replace_all(.,"-","_")
-projects %>%
+report_projects() %>%
   openxlsx::write.xlsx(., paste0(date,"_project_analysis.xlsx"),asTable = T)
 
 
