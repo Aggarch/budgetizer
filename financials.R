@@ -645,7 +645,14 @@ state_of_account <- function(clue){
     janitor::adorn_totals()
   
   
+  payments <- transact %>% 
+    filter(type == "Payment") %>% 
+    filter(grepl(clue,customer)) %>% 
+    filter(amount>0)%>% 
+    select(date,type,name,account,amount)
+  
   return(list(openb = openb,
+              payments = payments,
               detailed = detailed,
               compacted = compacted,
               compacted_grouped = compacted_grouped
@@ -655,10 +662,9 @@ state_of_account <- function(clue){
 
 
 # 421 SH House state of account up to date. 
-sh <- state_of_account("421")
-  
-sh$openb %>% select(-due_date) %>% 
-  separate(name, c("client","project"),sep = "([:])") %>% 
+sh <- state_of_account("421")$openb %>% select(-due_date) %>% 
+  separate(name, c("client","project"),sep = "([:])") %>%
+  mutate(amount_paid = amount - open_balance) %>% 
   janitor::clean_names(case = "title") %>% 
   rename(Reference = Num) %>% 
   mutate(Service = case_when(str_detect(Project,"421 S Harbor")~"Stucco",
@@ -666,10 +672,23 @@ sh$openb %>% select(-due_date) %>%
                              str_detect(Project,"Painting")~"Painting",
                              TRUE ~ as.character(Project))) %>% 
   arrange(Project,Date) %>% relocate(.before = Amount,Service) %>% select(-Type) %>% 
-  mutate(Client = ifelse(Client == "Greenhaus Design-build, Inc.","Greenhaus",Client)) %>% 
-  openxlsx::write.xlsx(.,"updated.xlsx")
+  mutate(Client = ifelse(Client == "Greenhaus Design-build, Inc.","Greenhaus",Client)) 
+
+
+
+#  openxlsx::write.xlsx(sh,"updated.xlsx")
  
-sh$openb %>% distinct()
+# To Do: 
+
+# Create a list of eache check received by Greenhaus and Furshman,
+# Merge all checks into a PDF, calculate the total amount received 
+# re-balance the total amount paid between the different invoices 
+# re-run the statement and resume randyf_statement.docx
+# send email and call. 
+
+
+
+
 
 
 
