@@ -605,9 +605,8 @@ state_of_account <- function(clue){
     filter(grepl(clue,name)) %>% 
     select(-memo) %>% 
     mutate(open_balance = as.double(open_balance)) %>% 
-    select(-creation_date, - modification_date,-created_by)
-  
-  
+    select(-creation_date, - modification_date,-created_by) %>% 
+    mutate(project = clue)
   
   detailed <- transact %>%
     filter(type == "Invoice") %>%
@@ -623,46 +622,29 @@ state_of_account <- function(clue){
     mutate(service = str_to_lower(service)) %>% 
     mutate(service = str_replace(service, "income","")) %>% 
     mutate(service = str_trim(service)) %>% 
-    select(-creation_date, - modification_date,-created_by)
-  
-  
-  
-  compacted <- detailed %>% 
-    left_join(openb %>% 
-                select(num,open_balance), by="num") %>% 
-    mutate(service = ifelse(service =="materials",
-                            lag(service),service)) %>% 
-    mutate(service = ifelse(service =="materials",
-                            lag(service),service)) 
-  
-  
-  compacted_grouped <- compacted %>%
-    group_by(project,num) %>% 
-    summarise(amount = sum(amount),
-              open_balance = last(open_balance),
-              .groups = "drop") %>%
-    filter(!grepl("142",project)) %>% 
-    janitor::adorn_totals()
-  
+    select(-creation_date, - modification_date,-created_by) %>% 
+    mutate(project = clue)
   
   payments <- transact %>% 
     filter(type == "Payment") %>% 
     filter(grepl(clue,customer)) %>% 
     filter(amount>0)%>% 
-    select(date,type,name,account,amount)
+    select(date,type,name,account,amount) %>% 
+    mutate(project = clue)
+  
+  
   
   return(list(openb = openb,
               payments = payments,
-              detailed = detailed,
-              compacted = compacted,
-              compacted_grouped = compacted_grouped
+              detailed = detailed
   ))
   
 }
 
 
 # 421 SH House state of account up to date. 
-sh <- state_of_account("421")$openb %>% select(-due_date) %>% 
+
+statement <- state_of_account("421")$openb %>% select(-due_date) %>% 
   separate(name, c("client","project"),sep = "([:])") %>%
   mutate(amount_paid = amount - open_balance) %>% 
   janitor::clean_names(case = "title") %>% 
@@ -676,8 +658,7 @@ sh <- state_of_account("421")$openb %>% select(-due_date) %>%
 
 
 
-#  openxlsx::write.xlsx(sh,"updated.xlsx")
- 
+
 # To Do: 
 
 # Create a list of eache check received by Greenhaus and Furshman,
@@ -687,8 +668,63 @@ sh <- state_of_account("421")$openb %>% select(-due_date) %>%
 # send email and call. 
 
 
+global_state <- function(clue){ 
+  
+  openb <- invoices %>% 
+    filter(grepl(clue,name)) %>% 
+    select(-memo) %>% 
+    mutate(open_balance = as.double(open_balance)) %>% 
+    select(-creation_date, - modification_date,-created_by) %>% 
+    mutate(project = clue)
+  
+  payments <- transact %>% 
+    filter(type == "Payment") %>% 
+    filter(grepl(clue,customer)) %>% 
+    filter(amount>0)%>% 
+    select(date,type,name,account,amount) %>% 
+    mutate(project = clue)
+  
+  smart_object <-  tibble(
+    project = clue,
+    invoiced = sum(openb$amount),
+    total_paid = sum(payments$amount),
+    diff_invoiced_paid = (sum(openb$amount)-sum(payments$amount)),
+    open_balance = sum(openb$open_balance),
+    logical_match = round(sum(openb$amount)-sum(payments$amount)) == round(sum(openb$open_balance)))
+  
+  
+  return(smart_object)
+  
+}
+
+perspective <- function(distance){ 
+  
+cut_date = rollback(today()-months(distance),roll_to_first = T)
+
+print(cut_date)
+
+running_pj <- transact %>% 
+  filter(date >= cut_date ) %>% 
+  replace_na(list(amount = 0 )) %>% 
+  group_by(customer) %>% 
+  summarise(amount = sum(amount)) %>% 
+  arrange(desc(amount)) %>% 
+  mutate(proport = amount/sum(amount)) %>%
+  mutate(pareto = cumsum(proport))  
+  # filter(pareto >= .8) 
+
+divergencies <- map(running_pj$customer, global_state) %>% 
+                map_dfr(., bind_rows) %>% distinct() %>% 
+                janitor::clean_names()%>%   
+                mutate_all(funs(replace(., is.na(.),0))) %>% 
+                distinct() %>% arrange(desc(open_balance))
 
 
+return(divergencies)
 
 
+}
+
+perspective <- perspective(5) %>% 
+  filter(grepl("421",project))
 
