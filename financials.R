@@ -522,12 +522,12 @@ stats %>% openxlsx::write.xlsx(.,"stats.xlsx")
 expenses_analysis <- function(limit){ 
 
 expend <- records %>%
-  filter(date >= limit) %>% 
+  # filter(date >= limit) %>% 
   filter(source == "expense")
 
 
 expenses_distribution <- records %>%
-  filter(date >= limit) %>% 
+  # filter(date >= limit) %>% 
   filter(source == "expense") %>%
   group_by(year_month,account) %>% 
   summarise(amount = sum(amount),.groups = "drop") %>% 
@@ -589,14 +589,13 @@ return(list(expend=expend,
 data <- expenses_analysis("2021-01-01")
 data %>% openxlsx::write.xlsx(.,"expenses_analysis.xlsx",asTable = T)
 
+data_accounts %>% 
+  select(contains("_2020")) %>% 
+  rowwise() %>% mutate("2020_mean" = rowMeans(across(where(is.numeric)))) %>% 
+  openxlsx::write.xlsx(.,"2020_mean.xlsx")
 
 # State of Account --------------------------------------------------------
 
-
-# data ::: 
-# transact <- cleaner("transactions")
-# exp      <- cleaner("expenses")
-# invoices <- cleaner("invo") 
 
 
 state_of_account <- function(clue){ 
@@ -661,7 +660,7 @@ statement <- state_of_account("421")$openb %>% select(-due_date) %>%
 
 # To Do: 
 
-# Create a list of eache check received by Greenhaus and Furshman,
+# Create a list of each check received by Greenhaus and Furshman,
 # Merge all checks into a PDF, calculate the total amount received 
 # re-balance the total amount paid between the different invoices 
 # re-run the statement and resume randyf_statement.docx
@@ -725,6 +724,11 @@ return(divergencies)
 
 }
 
-perspective <- perspective(5) %>% 
+sh_pjs <- perspective(5) %>% 
   filter(grepl("421",project))
+
+mismatch <- sh_pjs %>% 
+  filter(logical_match == 0) %>% 
+  pull(project)
+
 

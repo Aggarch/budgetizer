@@ -1105,6 +1105,14 @@ return(list(
 
 }
 
+# Materials %
+# 
+# D&F  ::: 40%
+# STUC ::: 12%
+# FAMG ::: 60%
+# APNT ::: 20%
+# INST ::: 20%
+
 # Execution 
 project_report()
 
@@ -1183,33 +1191,6 @@ report_projects() %>%
   openxlsx::write.xlsx(., paste0(date,"_project_analysis.xlsx"),asTable = T)
 
 
-
-# Materials %
-# 
-# D&F  ::: 40%
-# STUC ::: 12%
-# FAMG ::: 60%
-# APNT ::: 20%
-# INST ::: 20%
-
-
-
-
-outflow <- openxlsx::read.xlsx("april.xlsx") %>%
-  as_tibble() %>% 
-  filter(!is.na(Amount.Paid)) %>% 
-  mutate(Payment.Date = as.Date(Payment.Date, origin = "1899-12-30")) %>%
-  mutate(date = as.Date(Payment.Date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y"),optional = F)) %>% 
-  group_by(Project,date) %>%
-  summarise(cant = n(), amount = sum(Amount.Paid),.groups = "drop")
-
-
-outflow %>%
-  group_by(Project) %>% 
-  summarise(cant = sum(cant),
-            amount = sum(amount)) %>% 
-  filter(!is.na(Project), 
-         !grepl("ROHO",Project))
 
 
 
