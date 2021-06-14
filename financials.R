@@ -239,14 +239,14 @@ profit_estimator <- function(i_date,f_date){
 # Resource Execution ----------------------------------------------------------------
 
 
-data <- profit_estimator("2019-01-01","2021-06-08")
+data <- profit_estimator("2019-01-01","2021-06-14")
 
 
 # Local Storage 
 date <- lubridate::today() %>% str_replace_all(.,"-","_")
 
-data %>%
-  openxlsx::write.xlsx(., paste0(date,"_Business_review.xlsx"),asTable = T)
+# data %>%
+#   openxlsx::write.xlsx(., paste0(date,"_Business_review.xlsx"),asTable = T)
 
 
 profit_resumen = data$monthly_profit_resumen
@@ -522,13 +522,11 @@ stats %>% openxlsx::write.xlsx(.,"stats.xlsx")
 expenses_analysis <- function(limit){ 
 
 expend <- records %>%
-  # filter(date >= limit) %>% 
+  filter(date >= limit) %>% 
   filter(source == "expense")
 
 
-expenses_distribution <- records %>%
-  # filter(date >= limit) %>% 
-  filter(source == "expense") %>%
+expenses_distribution <- expend %>% 
   group_by(year_month,account) %>% 
   summarise(amount = sum(amount),.groups = "drop") %>% 
   pivot_wider(names_from = year_month, values_from = amount) %>% 
@@ -586,7 +584,7 @@ return(list(expend=expend,
 }
 
 
-data <- expenses_analysis("2021-01-01")
+data <- expenses_analysis("2020-01-01")
 data %>% openxlsx::write.xlsx(.,"expenses_analysis.xlsx",asTable = T)
 
 data_accounts %>% 
