@@ -525,22 +525,58 @@ expend <- records %>%
   filter(date >= limit) %>% 
   filter(source == "expense")
 
+vendors <- expend %>% filter(account != "Ask Accountant") %>% 
+  select(account,name) %>% distinct() %>% 
+  separate(account,c("main_account","sub_account"),sep="([:])") %>%
+  mutate(sub_account = ifelse(is.na(sub_account),
+                              main_account,
+                              sub_account)) %>%
+  mutate(name = ifelse(is.na(name),"-",name)) %>%
+  distinct() %>%
+  group_by(main_account, sub_account) %>% 
+  summarise(vendor = str_flatten(name,collapse = ","), .groups = "drop") %>%
+  ungroup()
+
 
 expenses_distribution <- expend %>% 
   group_by(year_month,account) %>% 
-  summarise(amount = sum(amount),.groups = "drop") %>% 
+  summarise(amount = sum(amount),
+            .groups = "drop") %>% 
   pivot_wider(names_from = year_month, values_from = amount) %>% 
   separate(account, c("main_account","sub_account"),sep = "([:])") %>% 
   ungroup() %>%
   janitor::clean_names() %>% 
   mutate_all(funs(replace(., is.na(.), 0))) %>% 
-  group_by(main_account) %>% 
+  group_by(main_account,sub_account) %>% 
   summarise_if(is.numeric, sum, na.rm = TRUE) %>% 
   ungroup() %>% 
   filter(main_account != "Ask Accountant")
 
+
+
+last_period <- as.character(year(today()) - 1 )
+
+averages_last_period <- expenses_distribution %>% 
+  select(main_account,sub_account,contains(last_period)) %>% 
+  rowwise() %>% 
+  mutate(all_period_sum = rowSums(across(where(is.numeric)))) %>% 
+  mutate("2020_average" = all_period_sum/12) %>% 
+  select(main_account, sub_account, "2020_average")
+  
+
+complete <- expenses_distribution %>% 
+  select(main_account,sub_account,contains("_2021")) %>% 
+  left_join(averages_last_period,by = c("main_account","sub_account")) %>% 
+  relocate(.after = sub_account, "2020_average") %>% 
+  mutate(sub_account = ifelse(sub_account == 0, main_account,sub_account)) %>% 
+  left_join(vendors, by =c("main_account","sub_account"))
+  
+
+
 expenses_month <- 
   expenses_distribution %>% 
+  group_by(main_account) %>% 
+  summarise_if(is.numeric, sum, na.rm = TRUE) %>% 
   pivot_longer(!main_account,
                names_to = "period",
                values_to = "amount") %>% 
@@ -577,6 +613,7 @@ data_accounts <- map(expenses_distribution$main_account, account_dist) %>%
 
 
 return(list(expend=expend,
+            complete = complete,
             data_accounts = data_accounts,
             expenses_month=expenses_month,
             expenses_distribution=expenses_distribution)) 
