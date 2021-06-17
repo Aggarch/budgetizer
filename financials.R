@@ -28,10 +28,17 @@ setwd("C:/Users/andre/Downloads")
 
 # Recursive functions  ----------------------------------------------------
 
-transact <- cleaner("transactions")
-exp      <- cleaner("expenses")
-invoices <- cleaner("invo")
+tei <- function(){ 
 
+transact <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report (1)")
+exp      <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report")
+invoices <- cleaner("ROHO'S+GROUP+CORP_Invoice+List+by+Date")
+ 
+return(list(t=transact,
+            e=exp,
+            i=invoices))
+
+}
 
 
 # Transactions Query ------------------------------------------------------
@@ -40,9 +47,9 @@ invoices <- cleaner("invo")
 # Data Master 
 data_master <- function(){ 
   
-  transact <- cleaner("transactions")
-  exp      <- cleaner("expenses")
-  invoices <- cleaner("invo")
+  transact <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report (1)")
+  exp      <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report")
+  invoices <- cleaner("ROHO'S+GROUP+CORP_Invoice+List+by+Date")
   
   expenses_vector <- exp %>%  distinct(account)%>%
     add_row(account = "Automobile Expense:Leasing") %>%
@@ -102,8 +109,6 @@ data_master <- function(){
   
   
 }
-
-
 
 
 # Profit Stimator ---------------------------------------------------------
@@ -269,7 +274,6 @@ profit_estimator <- function(i_date,f_date){
   ))
   
 }
-
 
 
 # Resource Execution ----------------------------------------------------------------

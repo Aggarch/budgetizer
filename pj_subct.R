@@ -96,7 +96,21 @@ invoicing <- function(clue){
 cleaner <- function(file){
   
 file_name <-   paste0(file,".xlsx")
-final_file_name <- paste0(file,"_clean.xlsx")
+
+
+if(file_name == "ROHO'S+GROUP+CORP_Transaction+Report.xlsx"){
+  
+   final_file_name <- "expenses.xlsx"
+
+} else if (file_name == "ROHO'S+GROUP+CORP_Transaction+Report (1).xlsx"){
+     
+  final_file_name <- "transactions.xlsx"
+} else {
+     
+  final_file_name <- "invo.xlsx"
+   
+}
+
 setwd("C:/Users/andre/Downloads")
 
 data <- openxlsx::read.xlsx(file_name) %>% as_tibble()
