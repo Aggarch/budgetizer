@@ -96,6 +96,7 @@ invoicing <- function(clue){
 cleaner <- function(file){
   
 file_name <-   paste0(file,".xlsx")
+final_file_name <- paste0(file,"_clean.xlsx")
 setwd("C:/Users/andre/Downloads")
 
 data <- openxlsx::read.xlsx(file_name) %>% as_tibble()
@@ -112,7 +113,7 @@ transact_tibble <- tibble[-1,] %>% filter(date != is.na(date))%>%
   arrange(desc(creation_date)) %>% select(-create_date,-last_modified)
 
 
-openxlsx::write.xlsx(transact_tibble,file_name)
+openxlsx::write.xlsx(transact_tibble,final_file_name)
 
 return(transact_tibble)
 
@@ -1523,7 +1524,20 @@ cogs_wc <- transactions %>%
 
 
 
+start <- function(pj){
+  
+  
+  
+  ctl <- openxlsx::read.xlsx("closed_time_logs.xlsx") %>%
+    as_tibble() %>% janitor::clean_names() %>%     
+    mutate(task_date = as.Date(task_date, origin = "1899-12-30")) %>% 
+    filter(grepl(pj,project_name)) %>% 
+    arrange(task_date)
 
+  
+  return(ctl)
+  
+}
 
 
 

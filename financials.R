@@ -25,46 +25,39 @@ library(zoo)
 setwd("C:/Users/andre/Downloads")
 
 
-master_clean <- function(){
-  
+
+# Recursive functions  ----------------------------------------------------
+
+transact <- cleaner("transactions")
+exp      <- cleaner("expenses")
+invoices <- cleaner("invo")
+
+
+
+# Transactions Query ------------------------------------------------------
+
+
+# Data Master 
+data_master <- function(){ 
   
   transact <- cleaner("transactions")
   exp      <- cleaner("expenses")
   invoices <- cleaner("invo")
   
-  return(list(transact=transact,
-              exp = exp,
-              invoices = invoices))
-  
-}
-
-# Call function
-raw_data <- master_clean()
-
-# Split data 
-transact <- raw_data$transact
-exp <- raw_data$exp
-invoices <- raw_data$invoices
-
-
-
-# Recursive functions  ----------------------------------------------------
-
-
-
-profit_estimator <- function(i_date,f_date){ 
+  expenses_vector <- exp %>%  distinct(account)%>%
+    add_row(account = "Automobile Expense:Leasing") %>%
+    add_row(account = "Other Expenses:Storage Rent") %>% 
+    pull(account)  
   
   
-  expenses_vector <- exp %>%  distinct(account) %>% pull(account)
-  
-  transactions <- transact %>% filter(between(date,as.Date(i_date),as.Date(f_date))) %>% as_tibble()
+  transactions <- transact 
   
   # minimalist queries 
   
   
   operational_income <- transactions %>% 
     replace_na(list(amount=0)) %>% 
-    filter(grepl(".Operational Income:",account)) 
+    filter(grepl(".Operational Income:",account))
   
   billable_income <- transactions %>% 
     replace_na(list(amount=0)) %>% 
@@ -85,6 +78,73 @@ profit_estimator <- function(i_date,f_date){
   expenses <- transactions %>% filter(account %in% expenses_vector) %>% 
     replace_na(list(amount=0))
   
+  
+  cross_tibble_raw <- operational_income %>% 
+    bind_rows(material_income,
+              direct_labor,
+              direct_material,
+              billable_income,
+              expenses)%>% 
+    mutate(year_month = as.yearmon(date, "%Y-%m")) %>% 
+    mutate(year_quarter = as.yearqtr(date, format = "%Y-%m-%d"))
+  
+  master <-  cross_tibble_raw %>% 
+    replace_na(list(amount = 0)) %>% 
+    mutate(source = case_when(str_detect(account,"Income:")~"income",
+                              str_detect(account,"Billable")~"income",
+                              str_detect(account,"Direct Labor")~"labor_cost",
+                              str_detect(account,"Direct Material")~"material_cost",
+                              TRUE ~ as.character(account)))%>%
+    select(-modification_date) %>% 
+    mutate(source = ifelse(account %in% expenses_vector,"expense",source))
+  
+  return(master)
+  
+  
+}
+
+
+
+
+# Profit Stimator ---------------------------------------------------------
+
+# DECLARE {i_date and f_date}
+
+profit_estimator <- function(i_date,f_date){ 
+  
+  expenses_vector <- exp %>%  distinct(account)%>%
+    add_row(account = "Automobile Expense:Leasing") %>%
+    add_row(account = "Other Expenses:Storage Rent") %>% 
+    pull(account)
+
+  transactions <- transact %>% filter(between(date,as.Date(i_date),as.Date(f_date))) %>% as_tibble()
+
+  # minimalist queries
+
+
+  operational_income <- transactions %>%
+    replace_na(list(amount=0)) %>%
+    filter(grepl(".Operational Income:",account))
+
+  billable_income <- transactions %>%
+    replace_na(list(amount=0)) %>%
+    filter(grepl("Billable",account))
+
+  material_income <- transactions %>%
+    replace_na(list(amount=0)) %>%
+    filter(grepl("Material Income:",account))
+
+  direct_labor <- transactions %>%
+    replace_na(list(amount=0)) %>%
+    filter(grepl("Direct Labor",account))
+
+  direct_material <- transactions %>%
+    replace_na(list(amount=0)) %>%
+    filter(grepl("Direct Material",account))
+
+  expenses <- transactions %>% filter(account %in% expenses_vector) %>%
+    replace_na(list(amount=0))
+
   
   
   # Distributions -----------------------------------------------------------
@@ -134,30 +194,7 @@ profit_estimator <- function(i_date,f_date){
   
   
   # Sense commutation 
-  cross_tibble_raw <- operational_income %>% 
-    bind_rows(material_income,
-              direct_labor,
-              direct_material,
-              billable_income,
-              expenses)%>% 
-    mutate(year_month = as.yearmon(date, "%Y-%m")) %>% 
-    mutate(year_quarter = as.yearqtr(date, format = "%Y-%m-%d"))
-  
-  
-  # Detailed Transacts classified
-  
-  # Acuracy contrasted using 2 diff methods.
-  profitability <-  cross_tibble_raw %>% 
-    replace_na(list(amount = 0)) %>% 
-    mutate(source = case_when(str_detect(account,"Income:")~"income",
-                              str_detect(account,"Billable")~"income",
-                              str_detect(account,"Direct Labor")~"labor_cost",
-                              str_detect(account,"Direct Material")~"material_cost",
-                              TRUE ~ as.character(account)))%>%
-    # mutate(source = ifelse(type == "Invoice","income",source)) %>% 
-    # mutate(amount = ifelse(source == "income" & amount < 0,amount*-1,amount)) %>% 
-    select(-modification_date) %>% 
-    mutate(source = ifelse(account %in% expenses_vector,"expense",source))
+  profitability <- data_master()
   
   
   # Sumarization & Arithmetics
@@ -235,11 +272,10 @@ profit_estimator <- function(i_date,f_date){
 
 
 
-
 # Resource Execution ----------------------------------------------------------------
 
 
-data <- profit_estimator("2019-01-01","2021-06-14")
+datap <- profit_estimator(i_date="2020-01-01",f_date = "2021-06-20")
 
 
 # Local Storage 
@@ -249,11 +285,11 @@ date <- lubridate::today() %>% str_replace_all(.,"-","_")
 #   openxlsx::write.xlsx(., paste0(date,"_Business_review.xlsx"),asTable = T)
 
 
-profit_resumen = data$monthly_profit_resumen
+monthly_profit_resumen <-  datap$monthly_profit_resumen
 
-quarter_profit_resumen <- data$quarter_profit_resumen
+quarter_profit_resumen <- datap$quarter_profit_resumen
 
-records <- data$classified_transactions
+records <- datap$classified_transactions
 
 
 
@@ -515,17 +551,25 @@ stats %>% openxlsx::write.xlsx(.,"stats.xlsx")
 
 
 
+
+
+
 # Expenses Analysis  ------------------------------------------------------
 
 
 
 expenses_analysis <- function(limit){ 
+  
 
-expend <- records %>%
-  filter(date >= limit) %>% 
-  filter(source == "expense")
 
-vendors <- expend %>% filter(account != "Ask Accountant") %>% 
+expend <- data_master() %>% 
+  filter(source == "expense") %>% 
+  select(-source)
+  
+
+vendors <- expend %>%
+  filter(date>=  limit) %>% 
+  filter(account != "Ask Accountant") %>% 
   select(account,name) %>% distinct() %>% 
   separate(account,c("main_account","sub_account"),sep="([:])") %>%
   mutate(sub_account = ifelse(is.na(sub_account),
@@ -569,8 +613,33 @@ complete <- expenses_distribution %>%
   left_join(averages_last_period,by = c("main_account","sub_account")) %>% 
   relocate(.after = sub_account, "2020_average") %>% 
   mutate(sub_account = ifelse(sub_account == 0, main_account,sub_account)) %>% 
-  left_join(vendors, by =c("main_account","sub_account"))
+  left_join(vendors, by =c("main_account","sub_account")) %>% 
+  filter(!is.na(vendor))
+  # filter(!sub_account %in% c("Automobile Expense",
+  #                            "Loan","Renting","Bad Debts"))
+
+period_observe <- expend %>%
+  filter(year_month >  as.yearmon( today()-months(3))) %>% 
+  distinct(year_month) %>% 
+  pull() %>%
+  str_to_lower() %>%
+  str_replace_all(., " ", "_")
+
+
+complete_convex<- complete %>% 
+  select(sub_account,contains(period_observe),-vendor) %>% 
+  mutate(no_zeros = rowSums(. == 0)) %>% 
+  mutate(all_period_sum = rowSums(across(where(is.numeric)))) %>% 
+  mutate(test = all_period_sum < 100) %>% 
+  filter(no_zeros <3 ) %>% filter(test == 0)
   
+complete_cleaned <- complete %>%
+  filter(sub_account %in% complete_convex$sub_account) %>% 
+  filter(sub_account != "Automobile Expense")%>% 
+  mutate(t = main_account == sub_account) %>% 
+  mutate(number_v = str_count(vendor,",")) %>% 
+  mutate(number_vendors = number_v+1) %>% 
+  select(-t,-number_v)
 
 
 expenses_month <- 
@@ -608,26 +677,100 @@ data_accounts <- map(expenses_distribution$main_account, account_dist) %>%
                  map_dfr(., bind_rows) %>% distinct() %>% 
                  janitor::clean_names()%>%   
                  mutate_all(funs(replace(., is.na(.),0))) %>% 
-                 distinct()
+                 distinct() %>% 
+                 separate(account, c("main_account",
+                                     "sub_account",
+                                     "spec_account"),sep = "([:])") 
+
+                 
 
 
 
 return(list(expend=expend,
-            complete = complete,
+            budget = complete_cleaned,
             data_accounts = data_accounts,
-            expenses_month=expenses_month,
-            expenses_distribution=expenses_distribution)) 
+            expenses_month=expenses_month)) 
 
 }
 
 
-data <- expenses_analysis("2020-01-01")
-data %>% openxlsx::write.xlsx(.,"expenses_analysis.xlsx",asTable = T)
+
+datae <- expenses_analysis("2020-01-01")
+datae %>% openxlsx::write.xlsx(.,"expenses_analysis.xlsx",asTable = T)
 
 data_accounts %>% 
   select(contains("_2020")) %>% 
   rowwise() %>% mutate("2020_mean" = rowMeans(across(where(is.numeric)))) %>% 
   openxlsx::write.xlsx(.,"2020_mean.xlsx")
+
+
+
+
+# Vendors  ----------------------------------------------------------------
+
+
+
+vend_rolling_window <- function(initial,final,future_idate,future_fdate){ 
+
+# new vendors in one month period window 
+vendor_vector <- expend %>% 
+  filter(date <= as.Date(initial)) %>% 
+  distinct(name,account) %>% na.omit()
+
+
+not_classics <- expend %>% 
+  filter(between(date,as.Date(future_idate) ,
+                      as.Date(future_fdate)))%>% 
+  select(date,type,name,account,amount) %>% 
+  mutate(classic_vendor = name %in% vendor_vector$name) %>% 
+  mutate(classic_account = name %in% vendor_vector$account) %>% 
+  filter(classic_vendor == 0) %>%
+  filter(classic_vendor == 0) %>%
+  na.omit()
+
+return(not_classics)
+
+}
+
+
+unclassics <- function(){
+  
+time_windows <- expend %>%
+  select(date) %>%
+  mutate(date2 = date%m-% months(1)) %>%
+  mutate(to_first = rollback(date,roll_to_first = T))%>% 
+  mutate(to_last  = rollback(date,roll_to_first = F)) %>% 
+  select(to_first,to_last) %>% 
+  distinct() %>% 
+  mutate( to_first = to_first %m-% months(1)) %>% 
+  rename(final = to_last,
+         initial = to_first) %>% 
+  mutate(future_idate = initial %m+% months(1)) %>% 
+  mutate(future_fdate = final %m+% months(1)) %>% 
+  arrange(desc(initial)) %>% 
+  mutate_if(is.Date, as.character) %>% 
+  filter(initial >= "2020-01-01") 
+  # split(., seq(nrow(.)))
+  # split(.,seq(ncol(.)))
+
+  
+  
+divergencies <- pmap(
+                    list( 
+                    time_windows$initial,
+                    time_windows$final,
+                    time_windows$future_idate,
+                    time_windows$future_fdate),
+                    .f=vend_rolling_window) %>% 
+                map_dfr(., bind_rows) %>% distinct() %>% 
+                # select(-classic_vendor,-classic_account)%>% 
+                mutate(year_month = as.yearmon(date))
+
+
+return(divergencies)
+
+}
+
 
 # State of Account --------------------------------------------------------
 
