@@ -160,7 +160,8 @@ prices <- prices %>% filter(difficulty != 4)
 # check the logic of functions; explorer() & search_proposal()
 
 
-files <- explorer("PROPOSALS")
+files <- explorer("PROPOSALS") %>% 
+  filter(grepl(clue,files))
 
 
 search_proposal <- function(clue){ 
@@ -263,3 +264,6 @@ return(list(resume = resume, estimate = estimate))
 }
 
 estimator("6720")
+
+
+
