@@ -116,6 +116,7 @@ setwd("C:/Users/andre/Downloads")
 data <- openxlsx::read.xlsx(file_name) %>% as_tibble()
 data <- data[-1:-2,-1]
 names(data) <- as.character(data[1,])
+
 tibble <- data %>% janitor::clean_names()
 
 transact_tibble <- tibble[-1,] %>% filter(date != is.na(date))%>% 
@@ -1150,15 +1151,15 @@ setwd("C:/Users/andre/Downloads")
 
 # Open projects in Zoho 
 open_pj <- openxlsx::read.xlsx("open_pj.xlsx") %>% as_tibble() %>% 
-  select(project = Project.Name) %>% 
-  filter(!grepl("52 T|162 S|27 F",project))
+  rename(project = Project.Name)
 
 # All subcontracts in Zoho 
 clab <- openxlsx::read.xlsx("clab.xlsx")%>% as_tibble() %>% 
   janitor::clean_names() %>% 
-  select(project,controlabor_name,controlabor_id,
+  select(project,controlabor_name,start_date,controlabor_id,
          bid_price,labor_amount,materials) %>% 
-  semi_join(open_pj, by = "project")
+  mutate(start_date = as.Date(start_date, origin = "1899-12-30")) %>% 
+  semi_join(open_pj, by = "project") 
 
 data <- openxlsx::read.xlsx("payments.xlsx") %>% as_tibble() %>% 
   mutate(Payment.Date = as.Date(Payment.Date, origin = "1899-12-30")) %>% 
@@ -1181,9 +1182,31 @@ projects <- data %>%
   rename(material_paid = expense,controlabor_id = controlabor) %>% 
   select(-hourly_labor,-subcontract) %>% 
   left_join(clab,by=c("project","controlabor_id","controlabor_name")) %>% 
-  select(project,servicio=controlabor_name,bid_price,
+  select(project,servicio=controlabor_name,start_date,bid_price,
          labor_budget = labor_amount, labor_paid,
-         materials_budget = materials, material_paid)
+         materials_budget = materials, material_paid) %>% 
+  filter(!grepl("Maintenance",servicio)) %>% 
+  mutate_if(is.character, str_trim)
+
+
+closed_tl <- openxlsx::read.xlsx("closed_time_logs.xlsx") %>% 
+  as_tibble() %>% janitor::clean_names() %>%
+  mutate(task_date = as.Date(task_date, origin = "1899-12-30")) %>% 
+  group_by(project_name,controlabor) %>%
+  summarise(duration = sum(duration),.groups = "drop") %>% 
+  mutate(spent = duration * 21) %>% 
+  filter(project_name %in% open_pj$project, !grepl("Maintenance",controlabor)) %>% 
+  separate(controlabor, c("servicio","controlabor"),sep = "([-])") %>% 
+  mutate_if(is.character, str_trim) %>% select(-controlabor) %>% 
+  rename(hours_spent = duration, estimated_cost = spent,
+         project = project_name) 
+
+
+project_analysis <- projects %>%
+  left_join(closed_tl, by = c("project","servicio")) %>% 
+  replace_na(list(hours_spent = 0, estimated_cost = 0))
+
+
 
 changed_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>% 
   as_tibble() %>% filter(Project %in% projects$project) %>% 
@@ -1195,15 +1218,18 @@ changed_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>%
 
 
 return(list(data = data,
-            project_analysis = projects,
+            project_analysis = project_analysis,
             changed_orders = changed_orders))
 
 }
+
 
 # Local Storage 
 date <- lubridate::today() %>% str_replace_all(.,"-","_")
 report_projects() %>%
   openxlsx::write.xlsx(., paste0(date,"_project_analysis.xlsx"),asTable = T)
+
+
 
 
 

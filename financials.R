@@ -24,6 +24,49 @@ library(zoo)
 
 setwd("C:/Users/andre/Downloads")
 
+cleaner <- function(file){
+  
+  file_name <-   paste0(file,".xlsx")
+  
+  
+  if(file_name == "ROHO'S+GROUP+CORP_Transaction+Report.xlsx"){
+    
+    final_file_name <- "expenses.xlsx"
+    
+  } else if (file_name == "ROHO'S+GROUP+CORP_Transaction+Report (1).xlsx"){
+    
+    final_file_name <- "transactions.xlsx"
+  } else {
+    
+    final_file_name <- "invo.xlsx"
+    
+  }
+  
+  setwd("C:/Users/andre/Downloads")
+  
+  data <- openxlsx::read.xlsx(file_name) %>% as_tibble()
+  data <- data[-1:-2,-1]
+  names(data) <- as.character(data[1,])
+  
+  tibble <- data %>% janitor::clean_names()
+  
+  transact_tibble <- tibble[-1,] %>% filter(date != is.na(date))%>% 
+    mutate_all(., str_trim) %>% mutate(amount = as.double(amount)) %>% 
+    mutate(date = as.Date(date, tryFormats = c("%m/%d/%Y"),optional = F )) %>% 
+    rename(type = transaction_type,memo = memo_description) %>% 
+    mutate(creation_date = lubridate::parse_date_time(create_date, orders="mdy HMS")) %>% 
+    mutate(modification_date = lubridate::parse_date_time(last_modified, orders="mdy HMS")) %>% 
+    arrange(desc(creation_date)) %>% select(-create_date,-last_modified)
+  
+  
+  openxlsx::write.xlsx(transact_tibble,final_file_name)
+  
+  return(transact_tibble)
+  
+  
+}
+
+
 
 
 # Recursive functions  ----------------------------------------------------
@@ -702,11 +745,6 @@ return(list(expend=expend,
 datae <- expenses_analysis("2020-01-01")
 datae %>% openxlsx::write.xlsx(.,"expenses_analysis.xlsx",asTable = T)
 
-data_accounts %>% 
-  select(contains("_2020")) %>% 
-  rowwise() %>% mutate("2020_mean" = rowMeans(across(where(is.numeric)))) %>% 
-  openxlsx::write.xlsx(.,"2020_mean.xlsx")
-
 
 
 
@@ -912,5 +950,6 @@ sh_pjs <- perspective(5) %>%
 mismatch <- sh_pjs %>% 
   filter(logical_match == 0) %>% 
   pull(project)
+
 
 

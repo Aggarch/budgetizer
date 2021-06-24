@@ -2,6 +2,10 @@
 # This script rudiments how to automate the estimation of services, based on 
 # a tibble with prices and the dynamic grouping of services a criterias. 
 
+# https://stackoverflow.com/questions/12945687/read-all-worksheets-in-an-excel-workbook-into-an-r-list-with-data-frames
+
+
+
 # WEB-APP -----------------------------------------------------------------
 
 setwd("C:/Users/andre/Downloads")
@@ -146,3 +150,116 @@ prices <- prices %>% bind_rows(ns)
 
 prices <- prices %>% filter(difficulty != 4)
 
+
+
+# Stucco stimator example -------------------------------------------------
+
+# create a workbook to save estimation by service in diff sheets. 
+# it's possible to embeed all process in one function?¿
+
+# check the logic of functions; explorer() & search_proposal()
+
+
+files <- explorer("PROPOSALS")
+
+
+search_proposal <- function(clue){ 
+
+
+setwd("C:/Users/andre/OneDrive/RohosGroup/PROPOSALS")
+  
+proposal_folder <-  list.files() %>% as_tibble() %>% 
+  filter(grepl(clue,value)) %>% pull()
+
+direction <-  getwd() %>% as_tibble() %>%
+  mutate(value = paste0(value,"/")) %>% 
+  mutate(value = paste0(value,proposal_folder)) %>% 
+  pull()
+
+setwd(direction)
+
+files_list <- getwd() %>% list.files() %>% as_tibble()
+
+specific_file <- list.files() %>% as_tibble() %>% 
+  filter(!grepl(".pdf|Client|client|auto",value)) %>% 
+  filter(grepl(".xlsx",value))
+
+new_file_name <- specific_file %>% 
+  mutate(value = str_replace_all(value," ","_")) %>%
+  mutate(value = paste0("auto_estimate_",value)) %>% 
+  pull()
+
+
+take_off <- openxlsx::read.xlsx(specific_file$value) %>% 
+  as_tibble() %>% janitor::clean_names() %>% 
+  mutate_if(is.character, str_to_lower)
+
+
+sheets <- openxlsx::getSheetNames(specific_file$value) %>%
+  as_tibble() %>% rename(sheets = value)
+
+setwd("C:/Users/andre/Downloads")
+
+
+return(list(sheets = sheets,take_off = take_off,
+            path = direction,new_file_name = new_file_name,
+            files_list = files_list))
+}
+
+estimator <- function(clue){ 
+
+toff <- search_proposal(clue)$take_off
+path <- search_proposal(clue)$path
+file <- search_proposal(clue)$new_file_name
+
+
+interest <- prices %>% colnames()
+
+object <- toff %>% 
+  mutate_if(is.character, str_to_lower) %>%
+  # select(project,location,contains(interest),total_sf) %>% 
+  left_join(prices,by = c("service", "difficulty", "texture", "design", "thickness")) 
+
+
+stucco_estim <- object %>%
+  group_by(service,difficulty, texture,design,thickness) %>%
+  summarise(price = max(price),total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
+  na.omit %>%
+  ungroup() %>% 
+  mutate(total_yards = round(total_sqft/9)) %>% 
+  mutate(total_price = price*total_yards) %>% 
+  mutate(price = as.character(price), 
+         difficulty = as.character(difficulty)) %>% 
+  janitor::adorn_totals()
+  # mutate(price = as.numeric(price),
+  #        difficulty = as.numeric(difficulty))
+
+
+estimate = list(take_off = object, stucco = stucco_estim)
+
+
+hs <- openxlsx::createStyle(
+  textDecoration = "BOLD", fontColour = "#FFFFFF", fontSize = 9,
+  fontName = "Calibri", fgFill = "#4F80BD"
+)
+
+setwd(path)
+getwd()
+
+openxlsx::write.xlsx(estimate, file,
+           startCol = c(1,2), startRow = 2,colNames = TRUE,
+           borders = "rows", headerStyle = hs,
+           asTable = T, withFilter = TRUE)
+
+
+
+resume <- getwd() %>% list.files() %>% as_tibble() %>% rename(files = value)
+
+print("DONE")
+
+return(list(resume = resume, estimate = estimate))
+
+
+}
+
+estimator("6720")
