@@ -20,6 +20,7 @@ library(readxl)
 library(openxlsx)
 
 
+
 # Aclaration  ------------------------------------------------------------------------------------
 #                                                                                                 #
 # NOTES > the reason why some subcontracts do not appear in consolidated date is                  #

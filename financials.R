@@ -592,6 +592,9 @@ total_net <- function(){
 
 
 
+
+
+
 stats <- gpc()[[2]]
 stats %>% openxlsx::write.xlsx(.,"stats.xlsx")
 
