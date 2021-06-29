@@ -161,10 +161,34 @@ prices <- prices %>% filter(difficulty != 4)
 
 # check the logic of functions; explorer() & search_proposal()
 
+explorer <- function(folder){
+  
+  
+  setwd("C:/Users/andre/OneDrive/RohosGroup") 
+  
+  getwd()%>% 
+    list.files() %>% as_tibble() %>%
+    rename(folders = value) %>% print()
+  
+  
+  direction <-  getwd() %>% as_tibble() %>%
+    mutate(value = paste0(value,"/")) %>% 
+    mutate(value = paste0(value,folder))
+  
+  setwd(direction$value)
+  
+  files <- getwd() %>% list.files() %>% as_tibble() %>% 
+    rename(files = value)
+  
+  getwd() %>% print()
+  
+  setwd("C:/Users/andre/Downloads")
+  
+  return(files)
+  
+}
 
-files <- explorer("PROPOSALS") %>% 
-  filter(grepl(clue,files))
-
+files <- explorer("PROPOSALS")
 
 search_proposal <- function(clue){ 
 
@@ -228,9 +252,14 @@ object <- toff %>%  mutate_if(is.character, str_to_lower) %>%
   filter(!grepl("not|tot",project)) %>% 
   mutate_if(is.character, str_trim)
 
-prods <- object %>% group_by(service) %>% summarise(area = sum(total_sf))
+prods <- object %>% 
+  group_by(service) %>% 
+  summarise(area = sum(total_sf)) 
 
-# framing 
+
+if(nrow(prods)>0 & sum(prods$area)>1){ 
+
+if("framing" %in% prods$service){ 
 framing_estim <- object %>%
   filter(grepl("framing",service)) %>%   
   group_by(service,difficulty,surface,material,thickness,caliber) %>%
@@ -238,9 +267,11 @@ framing_estim <- object %>%
   na.omit %>%
   ungroup() %>% 
   mutate_if(is.character, str_trim)
+}
+else{framing_estim <- as_tibble(x=0); 
+framing <- as_tibble("framing") %>% mutate(dimens = 0)}
 
-
-# drywall installation 
+if("drywall_installation" %in% prods$service){ 
 drywall_estim <- object %>%
 filter(grepl("drywall",service)) %>%   
   group_by(service,difficulty,material,thickness) %>%
@@ -263,8 +294,11 @@ filter(grepl("drywall",service)) %>%
          difficulty = as.character(difficulty)) %>% 
   janitor::adorn_totals()
   drywall <- as_tibble("drywall") %>% mutate(dimens = nrow(drywall_estim)) 
+}
+else{drywall_estim <- as_tibble(x=0);
+drywall <- as_tibble("drywall") %>% mutate(dimens = 0)}
 
-  
+if("plywood_installation" %in% prods$service){ 
 # plywood installation
   plywood_estim <- object %>% filter(grepl("plywood",service)) %>% 
     group_by(difficulty,service) %>% 
@@ -279,9 +313,11 @@ filter(grepl("drywall",service)) %>%
            difficulty = as.character(difficulty)) %>% 
   janitor::adorn_totals()  
   plywood <- as_tibble("plywood") %>% mutate(dimens = nrow(plywood_estim))
-  
+}
+else{plywood_estim <- as_tibble(x=0);
+plywood <- as_tibble("plywood") %>% mutate(dimens = 0)}
 
-# finish 
+if("finish" %in% prods$service){ 
   finish_estim <- object %>% filter(grepl("finish",service)) %>% 
     group_by(difficulty,service,material,texture,design) %>% 
     summarise(total_sf = round(sum(total_sf)),.groups = "drop") %>% 
@@ -293,9 +329,11 @@ filter(grepl("drywall",service)) %>%
            difficulty = as.character(difficulty)) %>% 
     janitor::adorn_totals()  
   finish <- as_tibble("finish") %>% mutate(dimens = nrow(finish_estim))
+}
+else{finish_estim <- as_tibble(x=0);
+finish <- as_tibble("finish") %>% mutate(dimens = 0)}
   
-  
-# stucco 
+if("stucco" %in% prods$service){ 
   stucco_estim <- object %>%
   filter(grepl("stucc",service)) %>% 
     group_by(service,difficulty, texture,design,thickness) %>%
@@ -310,8 +348,11 @@ filter(grepl("drywall",service)) %>%
              difficulty = as.character(difficulty)) %>% 
     janitor::adorn_totals()
     stucco <- as_tibble("stucco") %>% mutate(dimens = nrow(stucco_estim))
-    
-    
+}
+else{stucco_estim <- as_tibble(x=0);
+      stucco <- as_tibble("stucco") %>% mutate(dimens = 0)}
+
+}else{stop("no services")}
 
 estimate_list = list(take_off = object,
                      framing  = framing_estim,
@@ -321,13 +362,19 @@ estimate_list = list(take_off = object,
                      finish   = finish_estim)
 
 
-exclution <- stucco %>% bind_rows(drywall) %>% filter(dimens <= 1) %>% pull(value)
+exclution <- stucco  %>%
+  bind_rows(drywall) %>%
+  bind_rows(plywood) %>%
+  bind_rows(finish)  %>% 
+  bind_rows(framing) %>% 
+  filter(dimens<=1)  %>% 
+  pull(value)
 
 estimate <- list.remove(estimate_list,exclution)
 
 
 hs <- openxlsx::createStyle(
-  textDecoration = "BOLD", fontColour = "#FFFFFF", fontSize = 9,
+  textDecoration = "BOLD", fontColour = "#FFFFFF", fontSize = 11,
   fontName = "Calibri", fgFill = "#4F80BD"
 )
 
@@ -335,7 +382,7 @@ setwd(path)
 getwd()
 
 openxlsx::write.xlsx(estimate, file,
-           startCol = c(1,2), startRow = 2,colNames = TRUE,
+           startCol = 1, startRow = 1,colNames = TRUE,
            borders = "rows", headerStyle = hs,
            asTable = T, withFilter = TRUE)
 
