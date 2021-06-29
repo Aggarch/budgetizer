@@ -14,7 +14,6 @@
 # estimator():Import,wrangler & estimation engine, file creation & cloud storage. 
 
 
-
 # Declare -----------------------------------------------------------------
 explorer <- function(folder){
   
@@ -249,7 +248,6 @@ estimator <- function(clue){
   
   
 }
-
 
 
 # Execution ---------------------------------------------------------------
