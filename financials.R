@@ -68,7 +68,6 @@ cleaner <- function(file){
 
 
 
-
 # Recursive functions  ----------------------------------------------------
 
 tei <- function(){ 

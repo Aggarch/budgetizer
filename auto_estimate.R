@@ -1,5 +1,5 @@
 
-# Automatic Estimator -------------------------------------------------
+# Automatic Estimator -----------------------------------------------------
 
 # Program to detect a proposal folder given a 'clue',import & clean the take off 
 # & estimate the prices of the services included in the Architect's take off.
@@ -14,7 +14,8 @@
 # estimator():Import,wrangler & estimation engine, file creation & cloud storage. 
 
 
-# Declare
+
+# Declare -----------------------------------------------------------------
 explorer <- function(folder){
   
   
@@ -250,8 +251,8 @@ estimator <- function(clue){
 }
 
 
-# Execution
 
+# Execution ---------------------------------------------------------------
 proposals <- explorer("PROPOSALS")
 
 estimator("6720")
