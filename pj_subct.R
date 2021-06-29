@@ -1158,7 +1158,7 @@ open_pj <- openxlsx::read.xlsx("open_pj.xlsx") %>% as_tibble() %>%
 clab <- openxlsx::read.xlsx("clab.xlsx")%>% as_tibble() %>% 
   janitor::clean_names() %>% 
   select(project,controlabor_name,start_date,controlabor_id,
-         bid_price,labor_amount,materials) %>% 
+         bid_price,labor_amount,materials,budget_days, used_days) %>% 
   mutate(start_date = as.Date(start_date, origin = "1899-12-30")) %>% 
   semi_join(open_pj, by = "project") 
 
@@ -1185,7 +1185,8 @@ projects <- data %>%
   left_join(clab,by=c("project","controlabor_id","controlabor_name")) %>% 
   select(project,servicio=controlabor_name,start_date,bid_price,
          labor_budget = labor_amount, labor_paid,
-         materials_budget = materials, material_paid) %>% 
+         materials_budget = materials, material_paid,
+         budget_days, used_days) %>% 
   filter(!grepl("Maintenance",servicio)) %>% 
   mutate_if(is.character, str_trim)
 
@@ -1194,19 +1195,21 @@ closed_tl <- openxlsx::read.xlsx("closed_time_logs.xlsx") %>%
   as_tibble() %>% janitor::clean_names() %>%
   mutate(task_date = as.Date(task_date, origin = "1899-12-30")) %>% 
   group_by(project_name,controlabor) %>%
-  summarise(duration = sum(duration),.groups = "drop") %>% 
+  summarise(duration = sum(duration),task_date = min(task_date),.groups = "drop") %>% 
   mutate(spent = duration * 21) %>% 
   filter(project_name %in% open_pj$project, !grepl("Maintenance",controlabor)) %>% 
   separate(controlabor, c("servicio","controlabor"),sep = "([-])") %>% 
   mutate_if(is.character, str_trim) %>% select(-controlabor) %>% 
   rename(hours_spent = duration, estimated_cost = spent,
-         project = project_name) 
+         project = project_name) %>% 
+  relocate(.before = project, task_date)
 
 
 project_analysis <- projects %>%
   left_join(closed_tl, by = c("project","servicio")) %>% 
-  replace_na(list(hours_spent = 0, estimated_cost = 0))
-
+  replace_na(list(hours_spent = 0, estimated_cost = 0)) %>% 
+  select(-start_date) %>% relocate(.after = servicio, task_date) %>% 
+  rename(start_date = task_date) 
 
 
 changed_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>% 

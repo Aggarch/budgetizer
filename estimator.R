@@ -145,7 +145,8 @@ transactions %>% filter(num %in% pump$num)
 
 prices <- openxlsx::read.xlsx("prices_tibble.xlsx") %>% as_tibble()
 
-ns <- prices %>% filter(service == "stucco") %>% filter(grepl("1",thickness)) %>% mutate(thickness = '7/8\"')
+ns <- prices %>% filter(service == "stucco") %>%
+  filter(grepl("1",thickness)) %>% mutate(thickness = '7/8\"')
 
 prices <- prices %>% bind_rows(ns)
 
@@ -210,34 +211,119 @@ return(list(sheets = sheets,take_off = take_off,
 
 estimator <- function(clue){ 
 
+pricing <- "C:/Users/andre/OneDrive/RohosGroup/FINANCIAL & BOOKEEPING/Pricing/"
+setwd(pricing)
+prices <- openxlsx::read.xlsx("prices.df.xlsx") %>% as_tibble()
+setwd("C:/Users/andre/Downloads")
+
+  
 toff <- search_proposal(clue)$take_off
 path <- search_proposal(clue)$path
 file <- search_proposal(clue)$new_file_name
 
 
-interest <- prices %>% colnames()
+# take off
+object <- toff %>%  mutate_if(is.character, str_to_lower) %>% 
+  filter(!is.na(project)) %>% 
+  filter(!grepl("not|tot",project)) %>% 
+  mutate_if(is.character, str_trim)
 
-object <- toff %>% 
-  mutate_if(is.character, str_to_lower) %>%
-  # select(project,location,contains(interest),total_sf) %>% 
-  left_join(prices,by = c("service", "difficulty", "texture", "design", "thickness")) 
+prods <- object %>% group_by(service) %>% summarise(area = sum(total_sf))
 
-
-stucco_estim <- object %>%
-  group_by(service,difficulty, texture,design,thickness) %>%
-  summarise(price = max(price),total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
+# framing 
+framing_estim <- object %>%
+  filter(grepl("framing",service)) %>%   
+  group_by(service,difficulty,surface,material,thickness,caliber) %>%
+  summarise(total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
   na.omit %>%
   ungroup() %>% 
-  mutate(total_yards = round(total_sqft/9)) %>% 
-  mutate(total_price = price*total_yards) %>% 
+  mutate_if(is.character, str_trim)
+
+
+# drywall installation 
+drywall_estim <- object %>%
+filter(grepl("drywall",service)) %>%   
+  group_by(service,difficulty,material,thickness) %>%
+  summarise(total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
+  na.omit %>%
+  ungroup() %>% 
+  left_join(prices, by=c("service","difficulty",
+                         "material" = "design","thickness")) %>% 
+  select(-texture) %>% 
+  mutate(total_price = round(price*total_sqft)) %>% 
+  mutate(materials = case_when(price == 1.88~ 1.04,
+                               price == 2.01~ 1.17,
+                               price == 1.30~ 0.46,
+                               price == 1.34~ 0.50,
+                               price == 1.22~ 0.38,
+                               price == 1.18~ 0.34)) %>% 
+  mutate(materials_cost = materials * total_sqft) %>% 
+  mutate_if(is.character, str_trim) %>% 
   mutate(price = as.character(price), 
          difficulty = as.character(difficulty)) %>% 
   janitor::adorn_totals()
-  # mutate(price = as.numeric(price),
-  #        difficulty = as.numeric(difficulty))
+  drywall <- as_tibble("drywall") %>% mutate(dimens = nrow(drywall_estim)) 
+
+  
+# plywood installation
+  plywood_estim <- object %>% filter(grepl("plywood",service)) %>% 
+    group_by(difficulty,service) %>% 
+    summarise(total_sf = round(sum(total_sf)),.groups = "drop") %>% 
+    left_join(prices, by = c("service","difficulty")) %>% 
+    select(-texture,-design,-thickness)%>% 
+    mutate(materials = 2.5) %>% 
+    mutate(total_price = round(price * total_sf),
+           materials_cost = materials * total_sf) %>% 
+    mutate(price = as.character(price), 
+           materials = as.character(materials),
+           difficulty = as.character(difficulty)) %>% 
+  janitor::adorn_totals()  
+  plywood <- as_tibble("plywood") %>% mutate(dimens = nrow(plywood_estim))
+  
+
+# finish 
+  finish_estim <- object %>% filter(grepl("finish",service)) %>% 
+    group_by(difficulty,service,material,texture,design) %>% 
+    summarise(total_sf = round(sum(total_sf)),.groups = "drop") %>% 
+    left_join(prices, by = c("service","difficulty",
+                             "material"= "texture","design")) %>% 
+    select(-texture,-design,-thickness)%>% 
+    mutate(total_price = round(price * total_sf)) %>% 
+    mutate(price = as.character(price), 
+           difficulty = as.character(difficulty)) %>% 
+    janitor::adorn_totals()  
+  finish <- as_tibble("finish") %>% mutate(dimens = nrow(finish_estim))
+  
+  
+# stucco 
+  stucco_estim <- object %>%
+  filter(grepl("stucc",service)) %>% 
+    group_by(service,difficulty, texture,design,thickness) %>%
+    summarise(total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
+    na.omit %>%
+    ungroup() %>% 
+    left_join(prices, by= c("service", "difficulty",
+                            "texture", "design", "thickness")) %>% 
+    mutate(total_yards = round(total_sqft/9)) %>% 
+    mutate(total_price = price*total_yards) %>% 
+    mutate(price = as.character(price), 
+             difficulty = as.character(difficulty)) %>% 
+    janitor::adorn_totals()
+    stucco <- as_tibble("stucco") %>% mutate(dimens = nrow(stucco_estim))
+    
+    
+
+estimate_list = list(take_off = object,
+                     framing  = framing_estim,
+                     stucco   = stucco_estim,
+                     drywall  = drywall_estim,
+                     plywood  = plywood_estim,
+                     finish   = finish_estim)
 
 
-estimate = list(take_off = object, stucco = stucco_estim)
+exclution <- stucco %>% bind_rows(drywall) %>% filter(dimens <= 1) %>% pull(value)
+
+estimate <- list.remove(estimate_list,exclution)
 
 
 hs <- openxlsx::createStyle(
@@ -267,4 +353,33 @@ return(list(resume = resume, estimate = estimate))
 estimator("6720")
 
 
+# build 3323 auto_estimate enrich the prices tibble 
+
+
+
+# Distance of project  ----------------------------------------------------
+
+as_distance <- function(
+  lat1, long1, lat2, long2,
+  unit = "km", R = c("km" = 6371, "miles" = 3959)[[unit]]
+) {
+  
+  rad <- pi / 180
+  d1 <- lat1 * rad
+  d2 <- lat2 * rad
+  dlat <- (lat2 - lat1) * rad
+  dlong <- (long2 - long1) * rad
+  a <- sin(dlat / 2) ^ 2 + cos(d1) * cos(d2) * sin(dlong / 2) ^ 2
+  c <- 2 * atan2(sqrt(a), sqrt(1 - a))
+  R * c
+}
+
+home <- geo(street = "24 Dockside Ln", city = "Key Largo",
+            state = "FL", method = "census")
+
+pj_address <- geo(street = "629 aledo ave", city = "Miami",
+                  state = "FL", method = "census")
+
+as_distance(home$lat, home$long,
+            pj_address$lat, pj_address$long, unit = "km")
 
