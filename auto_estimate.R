@@ -3,7 +3,7 @@
 
 # Program to detect a proposal folder given a 'clue',import & clean the take off 
 # & estimate the prices of the services included in the Architect's take off.
-# the algorithm also creates the resumen & save the result in original folder
+# the algorithm also creates the resume & save the result in original folder
 # it produces a sheet by services existing in take off file. 
 
 
@@ -13,6 +13,10 @@
 # search_proposal():Detect the folder of interest,create paths & extracts toff.
 # estimator():Import,wrangler & estimation engine, file creation & cloud storage. 
 
+# Libs
+library(tidyverse)
+library(openxlsx)
+library(rlist)
 
 # Declare -----------------------------------------------------------------
 explorer <- function(folder){
@@ -114,18 +118,24 @@ estimator <- function(clue){
     if("framing" %in% prods$service){ 
       framing_estim <- object %>%
         filter(grepl("framing",service)) %>%   
-        group_by(service,difficulty,surface,material,thickness,caliber) %>%
+        group_by(service,difficulty,surface,material,thickness,design) %>%
         summarise(total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
         na.omit %>%
         ungroup() %>% 
-        mutate_if(is.character, str_trim)
-    }
+        mutate_if(is.character, str_trim) %>% 
+        janitor::adorn_totals()  
+        # mutate(price = as.numeric(price)) %>%
+        # mutate(difficulty = as.numeric(difficulty)) 
+      framing <- as_tibble("framing") %>% mutate(dimens = nrow(framing_estim)) 
+      }
     else{framing_estim <- as_tibble(x=0); 
     framing <- as_tibble("framing") %>% mutate(dimens = 0)}
+    
     
     if("drywall_installation" %in% prods$service){ 
       drywall_estim <- object %>%
         filter(grepl("drywall",service)) %>%   
+        mutate(material = ifelse(material == "gypsum_type_x","gypsum",material)) %>% 
         group_by(service,difficulty,material,thickness) %>%
         summarise(total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
         na.omit %>%
@@ -144,14 +154,15 @@ estimator <- function(clue){
         mutate_if(is.character, str_trim) %>% 
         mutate(price = as.character(price), 
                difficulty = as.character(difficulty)) %>% 
-        janitor::adorn_totals()
+        janitor::adorn_totals() %>% 
+        mutate(price = as.numeric(price)) %>%
+        mutate(difficulty = as.numeric(difficulty)) 
       drywall <- as_tibble("drywall") %>% mutate(dimens = nrow(drywall_estim)) 
     }
     else{drywall_estim <- as_tibble(x=0);
     drywall <- as_tibble("drywall") %>% mutate(dimens = 0)}
     
     if("plywood_installation" %in% prods$service){ 
-      # plywood installation
       plywood_estim <- object %>% filter(grepl("plywood",service)) %>% 
         group_by(difficulty,service) %>% 
         summarise(total_sf = round(sum(total_sf)),.groups = "drop") %>% 
@@ -163,14 +174,18 @@ estimator <- function(clue){
         mutate(price = as.character(price), 
                materials = as.character(materials),
                difficulty = as.character(difficulty)) %>% 
-        janitor::adorn_totals()  
+        janitor::adorn_totals()  %>% 
+        mutate(price = as.numeric(price)) %>%
+        mutate(difficulty = as.numeric(difficulty)) 
       plywood <- as_tibble("plywood") %>% mutate(dimens = nrow(plywood_estim))
     }
     else{plywood_estim <- as_tibble(x=0);
     plywood <- as_tibble("plywood") %>% mutate(dimens = 0)}
     
     if("finish" %in% prods$service){ 
-      finish_estim <- object %>% filter(grepl("finish",service)) %>% 
+      finish_estim <- object %>% 
+        filter(grepl("finish",service)) %>% 
+        mutate(material = ifelse(material == "gypsum_type_x","gypsum",material)) %>% 
         group_by(difficulty,service,material,texture,design) %>% 
         summarise(total_sf = round(sum(total_sf)),.groups = "drop") %>% 
         left_join(prices, by = c("service","difficulty",
@@ -179,7 +194,9 @@ estimator <- function(clue){
         mutate(total_price = round(price * total_sf)) %>% 
         mutate(price = as.character(price), 
                difficulty = as.character(difficulty)) %>% 
-        janitor::adorn_totals()  
+        janitor::adorn_totals()  %>% 
+        mutate(price = as.numeric(price)) %>%
+        mutate(difficulty = as.numeric(difficulty)) 
       finish <- as_tibble("finish") %>% mutate(dimens = nrow(finish_estim))
     }
     else{finish_estim <- as_tibble(x=0);
@@ -198,7 +215,9 @@ estimator <- function(clue){
         mutate(total_price = price*total_yards) %>% 
         mutate(price = as.character(price), 
                difficulty = as.character(difficulty)) %>% 
-        janitor::adorn_totals()
+        janitor::adorn_totals() %>% 
+        mutate(price = as.numeric(price)) %>%
+        mutate(difficulty = as.numeric(difficulty)) 
       stucco <- as_tibble("stucco") %>% mutate(dimens = nrow(stucco_estim))
     }
     else{stucco_estim <- as_tibble(x=0);

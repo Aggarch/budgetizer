@@ -402,7 +402,16 @@ estimator("6720")
 
 # build 3323 auto_estimate enrich the prices tibble 
 
+odb <- get_business_onedrive()
 
+proposals <- odb$list_items("RohosGroup/PROPOSALS")
+files <- odb$list_items("RohosGroup/PROPOSALS/6720 SW 98 St - Tunrkey Cons")
+odb$open_item("RohosGroup/PROPOSALS/")
+odb$download_file("RohosGroup/PROPOSALS/6720 SW 98 St - Tunrkey Cons/6720 SW 98 St.xlsx",overwrite = T)
+
+
+
+# https://blog.revolutionanalytics.com/2021/02/microsoft365r.html
 
 # Distance of project  ----------------------------------------------------
 
