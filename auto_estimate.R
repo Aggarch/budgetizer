@@ -18,6 +18,12 @@ library(tidyverse)
 library(openxlsx)
 library(rlist)
 
+# Notes:
+# ADD Waterproofing & Painting to pricing process. 
+# ADD Resumen tibble, silent warnings of janitor:: 
+
+# Compare test projects. 
+
 # Declare -----------------------------------------------------------------
 explorer <- function(folder){
   
@@ -228,6 +234,24 @@ estimator <- function(clue){
     }
     else{stucco_estim <- as_tibble(x=0);
     stucco <- as_tibble("stucco") %>% mutate(dimens = 0)}
+    
+    
+    if("waterproofing" %in% prods$service){ 
+      waterp_estim <- object %>% filter(grepl("waterpr",service)) %>% 
+        group_by(service) %>% 
+        summarise(total_hours = round(sum(hours)),.groups = "drop") %>% 
+        mutate(days = ceiling(total_hours/8)) %>% 
+        mutate(price = 50) %>% 
+        mutate(labor = (price*days*8)) %>% 
+        mutate(materials = labor*.22) %>% 
+        mutate(total_price = labor+materials) %>%
+        mutate(price = as.character(price)) %>% 
+        janitor::adorn_totals()  %>% 
+        mutate(price = as.numeric(price))
+      waterproofing <- as_tibble("waterproofing") %>% mutate(dimens = nrow(waterp_estim))
+    }
+    else{waterp_estim <- as_tibble(x=0);
+    waterproofing <- as_tibble("waterproofing") %>% mutate(dimens = 0)}
     
   }else{stop("no services")}
   
