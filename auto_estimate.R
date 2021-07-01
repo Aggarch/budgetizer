@@ -106,7 +106,8 @@ estimator <- function(clue){
   object <- toff %>%  mutate_if(is.character, str_to_lower) %>% 
     filter(!is.na(project)) %>% 
     filter(!grepl("not|tot",project)) %>% 
-    mutate_if(is.character, str_trim)
+    mutate_if(is.character, str_trim) %>% 
+    mutate(difficulty = as.character(difficulty))
   
   prods <- object %>% 
     group_by(service) %>% 
@@ -123,9 +124,14 @@ estimator <- function(clue){
         na.omit %>%
         ungroup() %>% 
         mutate_if(is.character, str_trim) %>% 
-        janitor::adorn_totals()  
-        # mutate(price = as.numeric(price)) %>%
-        # mutate(difficulty = as.numeric(difficulty)) 
+        left_join(prices, by = c("service","material"="difficulty",
+                                 "surface"="texture","design","thickness")) %>% 
+        mutate(total_price = total_sqft * price) %>% 
+        mutate(price = as.character(price)) %>% 
+        distinct() %>% 
+        janitor::adorn_totals() %>%   
+        mutate(price = as.numeric(price)) %>% 
+        select(-difficulty)
       framing <- as_tibble("framing") %>% mutate(dimens = nrow(framing_estim)) 
       }
     else{framing_estim <- as_tibble(x=0); 
@@ -267,6 +273,21 @@ estimator <- function(clue){
   
   
 }
+
+
+# Testing Projects --------------------------------------------------------
+
+# 6801 Collins Ave Apt 1116
+# 90 East 5th St. Family Dollar
+# 125 NE 55th St.
+# 3457 N University Dr.
+# 3323 NE 166th St.
+# 540 W. 83rd St. Warehouse addition
+# 629 Aledo Ave
+# 254 Minorca Ave - Parking Garage #7
+# 530 Sound Dr
+# 3154 N Miami Ave - T-Mobile
+# 17651 SW 272 St
 
 
 # Execution ---------------------------------------------------------------
