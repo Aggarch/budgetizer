@@ -125,8 +125,10 @@ estimator <- function(clue){
     if("framing" %in% prods$service){ 
       framing_estim <- object %>%
         filter(grepl("framing",service)) %>%  
+        mutate(thickness = str_replace_all(thickness, "''",'"')) %>%
         group_by(service,surface,material,thickness,design) %>%
         summarise(total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
+        mutate(design = ifelse(is.na(design),"20ga",design)) %>% 
         na.omit %>%
         ungroup() %>% 
         mutate_if(is.character, str_trim) %>% 
@@ -146,6 +148,7 @@ estimator <- function(clue){
     if("drywall_installation" %in% prods$service){ 
       drywall_estim <- object %>%
         filter(grepl("drywall",service)) %>%   
+        mutate(thickness = str_replace_all(thickness, "''",'"')) %>%
         mutate(material = ifelse(material == "gypsum_type_x","gypsum",material)) %>% 
         group_by(service,difficulty,material,thickness) %>%
         summarise(total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
@@ -216,6 +219,7 @@ estimator <- function(clue){
     if("stucco" %in% prods$service){ 
       stucco_estim <- object %>%
         filter(grepl("stucc",service)) %>% 
+        mutate(thickness = str_replace_all(thickness, "''",'"')) %>%
         group_by(service,difficulty, texture,design,thickness) %>%
         summarise(total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
         na.omit %>%
