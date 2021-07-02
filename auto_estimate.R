@@ -124,8 +124,8 @@ estimator <- function(clue){
     
     if("framing" %in% prods$service){ 
       framing_estim <- object %>%
-        filter(grepl("framing",service)) %>%   
-        group_by(service,difficulty,surface,material,thickness,design) %>%
+        filter(grepl("framing",service)) %>%  
+        group_by(service,surface,material,thickness,design) %>%
         summarise(total_sqft = round(sum(total_sf)),.groups = "drop") %>% 
         na.omit %>%
         ungroup() %>% 
@@ -136,8 +136,7 @@ estimator <- function(clue){
         mutate(price = as.character(price)) %>% 
         distinct() %>% 
         janitor::adorn_totals() %>%   
-        mutate(price = as.numeric(price)) %>% 
-        select(-difficulty)
+        mutate(price = as.numeric(price))
       framing <- as_tibble("framing") %>% mutate(dimens = nrow(framing_estim)) 
       }
     else{framing_estim <- as_tibble(x=0); 
@@ -312,6 +311,7 @@ estimator <- function(clue){
 # 530 Sound Dr
 # 3154 N Miami Ave - T-Mobile
 # 17651 SW 272 St
+# 3015 Grand Ave. (Skinlab)
 
 
 # Execution ---------------------------------------------------------------

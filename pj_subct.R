@@ -1209,7 +1209,35 @@ project_analysis <- projects %>%
   left_join(closed_tl, by = c("project","servicio")) %>% 
   replace_na(list(hours_spent = 0, estimated_cost = 0)) %>% 
   select(-start_date) %>% relocate(.after = servicio, task_date) %>% 
-  rename(start_date = task_date) 
+  rename(start_date = task_date) %>% 
+  mutate(Revision = lubridate::today()) %>% 
+  relocate(.after = bid_price, Revision) %>% 
+  mutate("Completion %" = 1) %>% 
+  relocate(.after = Revision, "Completion %") %>% 
+  mutate("Labor Budget Completed"= labor_budget*1) %>% 
+  rename("Labor Budget Original" = labor_budget) %>% 
+  relocate(.before = labor_paid, "Labor Budget Completed") %>% 
+  mutate("Paid - Budget (Labor)" = 'labor_paid - Labor Budget Completed') %>% 
+  relocate(.after = labor_paid, "Paid - Budget (Labor)") %>% 
+  mutate(materials_b_completed = materials_budget * `Completion %`) %>% 
+  relocate(.after = materials_budget, materials_b_completed) %>% 
+  mutate("Paid - Budget (Materials)" = "materials_paid - materials_b_completed") %>% 
+  relocate(.after = material_paid,"Paid - Budget (Materials)") %>% 
+  mutate(remaining_days = budget_days - used_days) %>% 
+  relocate(.after = hours_spent,remaining_days) %>% 
+  select(-estimated_cost) %>% 
+  rename(Project = project, Servicio = servicio,'Start Date' = start_date,
+         'Bid Price' = bid_price, 'Labor Paid' = labor_paid, 
+         'Materials Budget Original' = materials_budget,
+         'Materials B Completed' = materials_b_completed,
+         'Materials Paid' = material_paid,
+         'Budget Days' = budget_days, 'Used Days' = used_days,
+         'Hours Registered' = hours_spent, 'Remaining days' = remaining_days) %>% 
+  mutate('Exp Profit' = "bid - materials budget - labor budget") %>% 
+  mutate('Current Profit' = "bid - labor paid - materials paid") %>% 
+  mutate('Real Profit' = "((bid - material) * completion %) - labor_paid") 
+  
+  
 
 
 changed_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>% 
