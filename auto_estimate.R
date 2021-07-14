@@ -205,8 +205,6 @@ estimator <- function(clue){
     
     
     
-    
-    
     if("plywood_installation" %in% prods$service){ 
       plywood_estim <- object %>% filter(grepl("plywood",service)) %>% 
         group_by(difficulty,service) %>% 
