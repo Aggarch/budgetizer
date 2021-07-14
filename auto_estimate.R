@@ -97,6 +97,9 @@ search_proposal <- function(clue){
 
 estimator <- function(clue){ 
   
+  library(tidyverse)
+  library(rlist)
+  
   pricing <- "C:/Users/andre/OneDrive/RohosGroup/FINANCIAL & BOOKEEPING/Pricing/"
   setwd(pricing)
   prices <- openxlsx::read.xlsx("prices.df.xlsx") %>% as_tibble()
@@ -206,13 +209,14 @@ estimator <- function(clue){
                                  "material"= "texture",
                                  "texture" = "thickness", 
                                  "design")) %>% 
-        select(-texture,-design,-thickness)%>% 
+        select(-texture,-design)%>% 
         mutate(total_price = round(price * total_sf)) %>% 
         mutate(price = as.character(price), 
                difficulty = as.character(difficulty)) %>% 
         janitor::adorn_totals()  %>% 
         mutate(price = as.numeric(price)) %>%
-        mutate(difficulty = as.numeric(difficulty)) 
+        mutate(difficulty = as.numeric(difficulty)) %>% 
+        select(service, everything())
       finish <- as_tibble("finish") %>% mutate(dimens = nrow(finish_estim))
     }
     else{finish_estim <- as_tibble(x=0);
@@ -257,6 +261,58 @@ estimator <- function(clue){
     }
     else{waterp_estim <- as_tibble(x=0);
     waterproofing <- as_tibble("waterproofing") %>% mutate(dimens = 0)}
+    
+    
+    
+    if("interior_paint" %in% prods$service){ 
+      interior_paint_estim <- object %>% filter(grepl("interior_p",service)) %>% 
+        group_by(service,difficulty,location,type) %>% 
+        summarise(total_hours = round(sum(hours)),.groups = "drop") %>% 
+        mutate(days = ceiling(total_hours/8)) %>% 
+        left_join(prices, by = c("service",
+                                 "difficulty", 
+                                 "location"= "texture", 
+                                 "type" = "design")) %>% 
+        select(-thickness) %>% 
+        mutate(labor = (price*days*8)) %>% 
+        mutate(materials = labor*.20) %>% 
+        mutate(total_price = labor+materials) %>%
+        mutate(price = as.character(price)) %>% 
+        janitor::adorn_totals()  %>% 
+        mutate(price = as.numeric(price))
+      interior_paint <- as_tibble("interior_paint") %>% 
+      mutate(dimens = nrow(interior_paint_estim))
+    }
+    else{interior_paint_estim <- as_tibble(x=0);
+    interior_paint <- as_tibble("interior_paint") %>% mutate(dimens = 0)}
+    
+    
+    
+    if("exterior_paint" %in% prods$service){ 
+      exterior_paint_estim <- object %>% filter(grepl("exterior_p",service)) %>% 
+        group_by(service,difficulty,location,type) %>% 
+        summarise(total_hours = round(sum(hours)),.groups = "drop") %>% 
+        mutate(days = ceiling(total_hours/8)) %>% 
+        left_join(prices, by = c("service",
+                                 "difficulty", 
+                                 "location"= "texture", 
+                                 "type" = "design")) %>% 
+        select(-thickness) %>% 
+        mutate(labor = (price*days*8)) %>% 
+        mutate(materials = labor*.20) %>% 
+        mutate(total_price = labor+materials) %>%
+        mutate(price = as.character(price)) %>% 
+        janitor::adorn_totals()  %>% 
+        mutate(price = as.numeric(price))
+        exterior_paint <- as_tibble("exterior_paint") %>% 
+        mutate(dimens = nrow(exterior_paint_estim))
+    }
+    else{exterior_paint_estim <- as_tibble(x=0);
+    exterior_paint <- as_tibble("exterior_paint") %>% mutate(dimens = 0)}
+    
+    
+    
+    
     
   }else{stop("no services")}
   
