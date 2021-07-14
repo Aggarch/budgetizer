@@ -1264,6 +1264,23 @@ report_projects() %>%
 
 
 
+update <- function(pj,subct){
+  
+  
+  x <- report_projects()$data
+  
+  
+  updated <-   x %>% 
+    filter(grepl(pj,project)) %>% 
+    filter(transaction_type != "Expense") %>% 
+    group_by(project,controlabor_name) %>% 
+    summarise(amount_paid = sum(amount_paid),.groups = "drop") %>% 
+    filter(grepl(subct,controlabor_name))  
+
+    return(updated)
+  
+  
+}
 
 
 

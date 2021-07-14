@@ -203,7 +203,9 @@ estimator <- function(clue){
         group_by(difficulty,service,material,texture,design) %>% 
         summarise(total_sf = round(sum(total_sf)),.groups = "drop") %>% 
         left_join(prices, by = c("service","difficulty",
-                                 "material"= "texture","design")) %>% 
+                                 "material"= "texture",
+                                 "texture" = "thickness", 
+                                 "design")) %>% 
         select(-texture,-design,-thickness)%>% 
         mutate(total_price = round(price * total_sf)) %>% 
         mutate(price = as.character(price), 
