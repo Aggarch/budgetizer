@@ -179,6 +179,34 @@ estimator <- function(clue){
     else{drywall_estim <- as_tibble(x=0);
     drywall <- as_tibble("drywall") %>% mutate(dimens = 0)}
     
+    
+    
+    if("insulation" %in% prods$service){ 
+      
+      insulation_estim <- object %>% filter(grepl("insulat",service)) %>% 
+        group_by(service,material,thickness) %>% 
+        summarise(total_sf = sum(total_sf), .groups = "drop") %>% 
+        ungroup() %>% 
+        mutate(price =  case_when(str_detect(material, "batt") ~ 1.2,
+                                  str_detect(material, "r") ~ 1.6)) %>% 
+        rowwise() %>% 
+        mutate(total_price = total_sf * price) %>% 
+        mutate(material =  case_when(str_detect(material, "batt") ~ 0.72,
+                                     str_detect(material, "r") ~    0.74)) %>% 
+        mutate(materials_cost = total_sf * material) %>% 
+        relocate(.after = total_price, material) %>% 
+        janitor::adorn_totals()
+        
+      insulation <- as_tibble("insulation") %>% mutate(dimens = nrow(insulation_estim)) 
+    }
+    else{insulation_estim <- as_tibble(x=0);
+    insulation-as_tibble("insulation") %>% mutate(dimens = 0)}
+    
+    
+    
+    
+    
+    
     if("plywood_installation" %in% prods$service){ 
       plywood_estim <- object %>% filter(grepl("plywood",service)) %>% 
         group_by(difficulty,service) %>% 
