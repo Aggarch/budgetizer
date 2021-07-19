@@ -138,6 +138,9 @@ return(transact_tibble)
 
 
 
+transactions <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report")
+
+
 #transactions <- cleaner("transactions")
 
 #Out of Algorithm: 
@@ -1168,6 +1171,21 @@ data <- openxlsx::read.xlsx("payments.xlsx") %>% as_tibble() %>%
   filter(!is.na(project))%>% 
   filter(project %in% open_pj$project)
 
+last_week <- data %>% 
+  filter(payment_date > lubridate::today() %m-% days(8) ) %>%
+  group_by(project,controlabor_name,transaction_type) %>%
+  mutate(controlabor_name = str_trim(controlabor_name)) %>%
+  summarise(amount_paid = sum(amount_paid),.groups = "drop")
+
+
+previous <- data %>% 
+  filter(payment_date <= lubridate::today() %m-% days(8) ) %>%
+  semi_join(last_week, by=c("project", controlabor_name)) %>% 
+  filter(payment_date <= lubridate::today() %m-% days(8) ) %>%
+  group_by(project,controlabor_name,transaction_type) %>%
+  mutate(controlabor_name = str_trim(controlabor_name)) %>%
+  summarise(amount_paid = sum(amount_paid),.groups = "drop")
+
 projects <- data %>% 
   group_by(project, controlabor,
            controlabor_name, transaction_type) %>% 
@@ -1628,5 +1646,23 @@ start <- function(pj){
   
 }
 
+
+
+detail <- transactions %>%
+  separate(customer, c("client","project"),sep = "([:])") %>% 
+  filter(grepl("Indirect|Labor|Direct Material|Fees|Services|Officer",account)) %>% 
+  mutate(concept = case_when(str_detect(account,"Materials")~"Materials",
+                             str_detect(account,"Labor")~"Labor",
+                             str_detect(account,"Supplies")~"Materials",
+                             str_detect(account, "Tools")~"Materials",
+                             str_detect(account, "Fees")~"Materials",
+                             str_detect(account, "S00")~"Invoice",
+                             TRUE ~ as.character(account))) %>% 
+  filter(between(date, as.Date("2021-07-10"), today())) %>% 
+  select(date, project,class,concept,amount) %>% 
+  arrange(project) %>% 
+  ungroup() %>% 
+  group_by(project,class,concept) %>% 
+  summarise(amount = sum(amount),.groups = "drop")
 
 

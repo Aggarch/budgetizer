@@ -954,4 +954,11 @@ mismatch <- sh_pjs %>%
   pull(project)
 
 
+# A client statement it's reachable from transactions records, 
+# filter by customer name, split in split, separate name between 
+# project and client, filter type to conserve Credit Memo & Invoice. 
+
+# Use cleaner function for quickbooks data downloaded. 
+
+
 

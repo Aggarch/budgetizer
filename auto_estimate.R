@@ -54,6 +54,7 @@ explorer <- function(folder){
 
 search_proposal <- function(clue){ 
   
+  library(tidyverse)
   
   setwd("C:/Users/andre/OneDrive/RohosGroup/PROPOSALS")
   
