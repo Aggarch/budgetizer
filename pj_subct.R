@@ -539,13 +539,6 @@ pj_recent <- openxlsx::read.xlsx("transactions.xlsx") %>% as_tibble()%>%
 
 
 
-
-
-
-
-
-
-
 # Section -----------------------------------------------------------------
 
 
@@ -1178,14 +1171,6 @@ last_week <- data %>%
   summarise(amount_paid = sum(amount_paid),.groups = "drop")
 
 
-previous <- data %>% 
-  filter(payment_date <= lubridate::today() %m-% days(8) ) %>%
-  semi_join(last_week, by=c("project", controlabor_name)) %>% 
-  filter(payment_date <= lubridate::today() %m-% days(8) ) %>%
-  group_by(project,controlabor_name,transaction_type) %>%
-  mutate(controlabor_name = str_trim(controlabor_name)) %>%
-  summarise(amount_paid = sum(amount_paid),.groups = "drop")
-
 projects <- data %>% 
   group_by(project, controlabor,
            controlabor_name, transaction_type) %>% 
@@ -1255,7 +1240,11 @@ project_analysis <- projects %>%
   mutate('Current Profit' = "bid - labor paid - materials paid") %>% 
   mutate('Real Profit' = "((bid - material) * completion %) - labor_paid") 
   
-  
+
+pj_short <- project_analysis %>% 
+  select(Project, Servicio, `Start Date`,
+         `Bid Price`,`Completion %`,`Labor Budget Original`,
+         `Labor Paid`,`Materials Budget Original`, `Materials Paid`)
 
 
 changed_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>% 
@@ -1269,7 +1258,8 @@ changed_orders <- openxlsx::read.xlsx("changed_orders.xlsx") %>%
 
 return(list(data = data,
             project_analysis = project_analysis,
-            changed_orders = changed_orders))
+            changed_orders = changed_orders,
+            pj_short = pj_short))
 
 }
 
@@ -1665,4 +1655,59 @@ detail <- transactions %>%
   group_by(project,class,concept) %>% 
   summarise(amount = sum(amount),.groups = "drop")
 
+
+# Invoiced in a pj by service: 
+
+pj_invoiced <- function(clue){ 
+
+data <- transactions %>% 
+  filter(grepl(clue,customer),
+         grepl("Invoice",type),
+         grepl("Accounts R",split)) %>%
+  filter(!is.na(account)) %>% 
+  separate(customer, c("client","project"),sep = "([:])") 
+  
+  
+invoiced <- data %>% 
+  separate(account, c("source", "service"),sep="([:])") %>% 
+  group_by(project,num, service) %>%
+  summarise(amount = sum(amount),.groups = "drop") %>% 
+  janitor::adorn_totals()
+
+
+assume_cost <- transactions %>% 
+  filter(grepl(clue,customer)) %>%
+  mutate(source = case_when(str_detect(account,"Direct Labor")~"labor",
+                            str_detect(account,"Direct Material")~"materials")) %>%
+  filter(!is.na(source)) %>% select(date, customer, class, amount, source) %>% 
+  separate(customer, c("client", "project"),sep="([:])") %>% select(-client) %>% 
+  group_by(project, source,class) %>%
+  summarise(amount = sum(amount),.groups = "drop") %>%
+  janitor::adorn_totals()
+
+
+return(list(invoiced = invoiced,
+            assume_cost  = assume_cost))
+
+}
+
+
+project_analysis %>% distinct(Project)
+
+# Onve all projects name matches, this will be a loop between open projects with 
+# assumed cost and expenses and the 'pj_invoiced()' function. 
+
+
+
+lunacon = pj_invoiced("11000 SW")
+beach_rd_141 = pj_invoiced("141 Beach Rd")
+caloosa_20 = pj_invoiced("20 Caloosa Ct")
+cora_2631 = pj_invoiced("2631 SW")
+main_3480 = pj_invoiced("3480 Main")
+barracuda_37 = pj_invoiced("37 barracuda")
+tarpon_54 = pj_invoiced("54 Tarpon")
+central_park_elem = pj_invoiced("Central Park")
+
+
+openxlsx::write.xlsx(projects,"current_projects.xlsx")
 

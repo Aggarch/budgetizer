@@ -389,7 +389,16 @@ estimator <- function(clue){
 
 # Testing Projects --------------------------------------------------------
 
+# 13090 SW 248 ST
+# 12 North Bridge Lane
+# 1871 SW 7 ST
+# 11091 NW 17TH ST (Fire Station #68)
+# 14500 Biscayne ºBlvd (Tropical Smoothie Café)
+# 3603 Thomas Ave Coconut Grove
+# 7535 N Kendall Dr (Psycho Bunny)
+# 7525 Coral Way.
 # 6801 Collins Ave Apt 1116
+# 3603 Thomas Ave Coconut Grove
 # 90 East 5th St. Family Dollar
 # 125 NE 55th St.
 # 3457 N University Dr.
@@ -401,7 +410,8 @@ estimator <- function(clue){
 # 3154 N Miami Ave - T-Mobile
 # 17651 SW 272 St
 # 3015 Grand Ave. (Skinlab)
-
+# 15 Al Canta Lane (Litkin Residence)
+# BLDG 704 ^0 705 Homestead Air Reserve Base
 
 # Execution ---------------------------------------------------------------
 proposals <- explorer("PROPOSALS")
