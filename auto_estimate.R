@@ -201,7 +201,7 @@ estimator <- function(clue){
       insulation <- as_tibble("insulation") %>% mutate(dimens = nrow(insulation_estim)) 
     }
     else{insulation_estim <- as_tibble(x=0);
-    insulation-as_tibble("insulation") %>% mutate(dimens = 0)}
+    insulation<-as_tibble("insulation") %>% mutate(dimens = 0)}
     
     
     
