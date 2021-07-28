@@ -398,7 +398,6 @@ estimator <- function(clue){
 # 7535 N Kendall Dr (Psycho Bunny)
 # 7525 Coral Way.
 # 6801 Collins Ave Apt 1116
-# 3603 Thomas Ave Coconut Grove
 # 90 East 5th St. Family Dollar
 # 125 NE 55th St.
 # 3457 N University Dr.
@@ -417,3 +416,4 @@ estimator <- function(clue){
 proposals <- explorer("PROPOSALS")
 
 estimator("6720")
+estimator("36 Angelfish Cay Dr 07272021")
