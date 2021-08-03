@@ -1142,7 +1142,9 @@ project_report() %>%
 
 report_projects <- function(){ 
 
-
+library(tidyverse)
+library(lubridate)
+  
 setwd("C:/Users/andre/Downloads")
 
 
@@ -1710,4 +1712,26 @@ central_park_elem = pj_invoiced("Central Park")
 
 
 openxlsx::write.xlsx(projects,"current_projects.xlsx")
+
+setwd("C:/Users/andre/Downloads/financials/data_power_bi")
+
+
+datata <- openxlsx::read.xlsx("raw_datap.xlsx") %>% 
+  as_tibble() %>%
+  mutate(Revision = as.Date(Revision, origin = "1899-12-30")) %>% 
+  janitor::clean_names() %>%
+  mutate_if(is.character, str_trim) %>% 
+  group_by(project) %>% 
+  summarise(bid_price = sum(bid_price),
+            services = str_flatten(servicio, collapse = ", " ),
+            completion_percent = mean(completion_percent),
+            labor_budget_original = sum(labor_budget_original),
+            labor_paid = sum(labor_paid), 
+            materials_budget_original = sum(materials_budget_original),
+            materials_paid = sum(materials_paid),
+            budget_days = sum(budget_days),
+            used_days = sum(used_days),
+            hours_registered = sum(hours_registered)) %>% 
+  mutate(completion_percent  = ifelse(completion_percent > 1,1,completion_percent))
+            
 

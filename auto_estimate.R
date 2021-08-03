@@ -20,11 +20,14 @@ library(rlist)
 
 # Notes:
 # ADD Waterproofing & Painting to pricing process. 
-# ADD Resumen tibble, silent warnings of janitor:: 
+# ADD Resume tibble, silent warnings of janitor:: 
 
 # Compare test projects. 
 
 # Declare -----------------------------------------------------------------
+
+
+# Expplore all the items contained in a specific folder. 
 explorer <- function(folder){
   
   
@@ -52,6 +55,8 @@ explorer <- function(folder){
   
 }
 
+
+# Identify an specific proposal's take off, named & extract it from cloud
 search_proposal <- function(clue){ 
   
   library(tidyverse)
@@ -96,6 +101,9 @@ search_proposal <- function(clue){
               files_list = files_list))
 }
 
+
+# Given an extracted proposal take off, auto-estimate the bids based on 
+# the cloud dynamic prices list. 
 estimator <- function(clue){ 
   
   library(tidyverse)
@@ -112,7 +120,7 @@ estimator <- function(clue){
   file <- search_proposal(clue)$new_file_name
   
   
-  # take off
+# take off
   object <- toff %>%  mutate_if(is.character, str_to_lower) %>% 
     filter(!is.na(project)) %>% 
     filter(!grepl("not|tot",project)) %>% 

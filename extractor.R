@@ -1,5 +1,7 @@
 
 
+# Extract a proposal service bid in a project, using a clue and service name. 
+
 extractor <- function(clue,value){ 
   
   library(tidyverse)
@@ -47,3 +49,7 @@ extractor <- function(clue,value){
   return(service_data)
   
 }
+
+
+# Map this fuction accross a list of projects to analize one specific
+# service pricing thru time and locations. 

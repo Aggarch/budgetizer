@@ -18,13 +18,20 @@
 # Download and clean data 
 
 
+# Libraries 
 library(tidyverse)
 library(lubridate)
 library(zoo)
 
-setwd("C:/Users/andre/Downloads")
+# Working directory - change or modify logic for deployment. 
+setwd("C:/Users/andre/Downloads/qb_data")
 
+
+# Quickbooks raw data cleasing. 
 cleaner <- function(file){
+  
+  setwd("C:/Users/andre/Downloads/qb_data")
+  
   
   file_name <-   paste0(file,".xlsx")
   
@@ -42,7 +49,8 @@ cleaner <- function(file){
     
   }
   
-  setwd("C:/Users/andre/Downloads")
+  setwd("C:/Users/andre/Downloads/qb_data")
+  
   
   data <- openxlsx::read.xlsx(file_name) %>% as_tibble()
   data <- data[-1:-2,-1]
@@ -70,7 +78,10 @@ cleaner <- function(file){
 
 # Recursive functions  ----------------------------------------------------
 
+# Once all QB data is downloaded, clean all at once:
 tei <- function(){ 
+
+setwd("C:/Users/andre/Downloads/qb_data/")
 
 transact <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report (1)")
 exp      <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report")
@@ -86,8 +97,12 @@ return(list(t=transact,
 # Transactions Query ------------------------------------------------------
 
 
-# Data Master 
+# Data Master : to store dinamically in database. 
 data_master <- function(){ 
+  
+  library(tidyverse)
+  library(lubridate)
+  library(zoo)
   
   transact <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report (1)")
   exp      <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report")
@@ -155,9 +170,15 @@ data_master <- function(){
 
 # Profit Stimator ---------------------------------------------------------
 
-# DECLARE {i_date and f_date}
+# Given a time window, 
+# estimate business profit based on transactions classification 
 
 profit_estimator <- function(i_date,f_date){ 
+  
+  transact <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report (1)")
+  exp      <- cleaner("ROHO'S+GROUP+CORP_Transaction+Report")
+  invoices <- cleaner("ROHO'S+GROUP+CORP_Invoice+List+by+Date")
+  
   
   expenses_vector <- exp %>%  distinct(account)%>%
     add_row(account = "Automobile Expense:Leasing") %>%
