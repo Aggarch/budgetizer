@@ -192,7 +192,7 @@ project_expenses <- expenses(project) %>%
   separate(account, c("main","second","third"),sep = "([.?:])") %>% 
   mutate(second = ifelse(main == "Cost of Goods Sold", second, main)) %>% 
   mutate(main = case_when(str_detect(second,"Direct")~"Cost",
-                          str_detect(second,"Indirect")~"Expense"))
+                            str_detect(second,"Indirect")~"Expense"))
 
 return(project_expenses)
 
