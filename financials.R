@@ -382,7 +382,7 @@ quarter_gpc <- function(){
          subtitle = paste("Based on Quickbooks Historical Transactions",i_quarter,f_quarter),  
          caption = "Where: Estimated Operational Profit = Total Cost/Income")
   
-  gpc <- quarter_gross_profit_chart + theme_wsj() + scale_colour_economist()
+    gpc <- quarter_gross_profit_chart + theme_wsj() + scale_colour_economist()
   
   stats <- quarter_profit_resumen %>%
     select(year_quarter,income,material_cost,labor_cost,
@@ -403,7 +403,7 @@ gpc <- function(){
   
   gross_profit_chart <- profit_resumen %>%
     ggplot(aes(x = year_month, y = operational_profit))+
-    geom_line()+
+    geom_line()+¡¡
     geom_area(color = "#91bbbf",fill="#d7eff7")+
     geom_point(size = 3,color = "#cdaed6")+
     labs(title = "Monthly Estimated Operational Profit", 
